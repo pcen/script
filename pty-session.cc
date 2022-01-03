@@ -52,7 +52,7 @@ void ul_pty_init_debug(int mask)
 
 struct ul_pty *ul_new_pty(int is_stdin_tty)
 {
-	struct ul_pty *pty = calloc(1, sizeof(*pty));
+	ul_pty *pty = static_cast<ul_pty*>(calloc(1, sizeof(*pty)));
 
 	if (!pty)
 		return NULL;

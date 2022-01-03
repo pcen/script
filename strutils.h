@@ -128,7 +128,7 @@ strrealloc(char *str, const char *newstr)
 	nsz = strlen(newstr);
 
 	if (nsz > osz)
-		str = realloc(str, nsz + 1);
+		str = static_cast<char*>(realloc(str, nsz + 1));
 	if (str)
 		memcpy(str, newstr, nsz + 1);
 	return str;

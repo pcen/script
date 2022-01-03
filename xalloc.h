@@ -127,7 +127,7 @@ char *xgethostname(void)
 	char *name;
 	size_t sz = get_hostname_max() + 1;
 
-	name = xmalloc(sizeof(char) * sz);
+	name = static_cast<char*>(xmalloc(sizeof(char) * sz));
 	if (gethostname(name, sz) != 0) {
 		free(name);
 		return NULL;

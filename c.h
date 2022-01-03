@@ -124,11 +124,11 @@
  * e.g. in a structure initializer (or wherever else comma expressions
  * aren't permitted).
  */
-#define UL_BUILD_BUG_ON_ZERO(e) __extension__ (sizeof(struct { int:-!!(e); }))
-#define BUILD_BUG_ON_NULL(e) ((void *)sizeof(struct { int:-!!(e); }))
+#define UL_BUILD_BUG_ON_ZERO(e) static_assert(e != 0)
+#define BUILD_BUG_ON_NULL(e) static_assert(e != NULL)
 
 #ifndef ARRAY_SIZE
-# define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + __must_be_array(arr))
+#define ARRAY_SIZE(arr) ((sizeof(arr) / sizeof(*(arr))) / static_cast<size_t>(!(sizeof(arr) % sizeof(*(arr)))))
 #endif
 
 #ifndef PATH_MAX
@@ -399,7 +399,7 @@ static inline int xusleep(useconds_t usec)
 #elif defined(HAVE_USLEEP)
 	return usleep(usec);
 #else
-# error	"System with usleep() or nanosleep() required!"
+	#error "System with usleep() or nanosleep() required!"
 #endif
 }
 

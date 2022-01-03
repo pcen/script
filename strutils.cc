@@ -956,7 +956,7 @@ char *strnconcat(const char *s, const char *suffix, size_t b)
         if (b > ((size_t) -1) - a)
                 return NULL;
 
-        r = malloc(a + b + 1);
+        r = static_cast<char*>(malloc(a + b + 1));
         if (!r)
                 return NULL;
 
@@ -1009,7 +1009,7 @@ int strappend(char **a, const char *b)
 	al = strlen(*a);
 	bl = strlen(b);
 
-	tmp = realloc(*a, al + bl + 1);
+	tmp = static_cast<char*>(realloc(*a, al + bl + 1));
 	if (!tmp)
 		return -ENOMEM;
 	*a = tmp;

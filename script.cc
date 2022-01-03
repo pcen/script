@@ -72,15 +72,15 @@
 static UL_DEBUG_DEFINE_MASK(script);
 UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
 
-#define SCRIPT_DEBUG_INIT	(1 << 1)
-#define SCRIPT_DEBUG_PTY	(1 << 2)
-#define SCRIPT_DEBUG_IO		(1 << 3)
-#define SCRIPT_DEBUG_SIGNAL	(1 << 4)
-#define SCRIPT_DEBUG_MISC	(1 << 5)
-#define SCRIPT_DEBUG_ALL	0xFFFF
+auto constexpr SCRIPT_DEBUG_INIT   = (1 << 1);
+auto constexpr SCRIPT_DEBUG_PTY    = (1 << 2);
+auto constexpr SCRIPT_DEBUG_IO     = (1 << 3);
+auto constexpr SCRIPT_DEBUG_SIGNAL = (1 << 4);
+auto constexpr SCRIPT_DEBUG_MISC   = (1 << 5);
+auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
 
-#define DBG(m, x)       __UL_DBG(script, SCRIPT_DEBUG_, m, x)
-#define ON_DBG(m, x)    __UL_DBG_CALL(script, SCRIPT_DEBUG_, m, x)
+#define DBG(m, x)    __UL_DBG(script, SCRIPT_DEBUG_, m, x)
+#define ON_DBG(m, x) __UL_DBG_CALL(script, SCRIPT_DEBUG_, m, x)
 
 #ifdef HAVE_LIBUTEMPTER
 # include <utempter.h>
@@ -97,31 +97,34 @@ UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
  * The same log file maybe be shared between both streams. For example
  * multi-stream timing file is possible to use for stdin as well as for stdout.
  */
-enum {
-	SCRIPT_FMT_RAW = 1,		/* raw slave/master data */
-	SCRIPT_FMT_TIMING_SIMPLE,	/* (classic) in format "<delta> <offset>" */
-	SCRIPT_FMT_TIMING_MULTI,	/* (advanced) multiple streams in format "<type> <delta> <offset|etc> */
+enum class ScriptFormat {
+	Invalid = 0,
+	Raw, // raw slave/master data
+	TimingSimple, // (classic) in format "<delta> <offset>"
+	TimingMulti, // (advanced) multiple streams in format "<type> <delta> <offset|etc>
 };
 
 struct script_log {
-	FILE	*fp;			/* file pointer (handler) */
-	int	format;			/* SCRIPT_FMT_* */
-	char	*filename;		/* on command line specified name */
-	struct timeval oldtime;		/* previous entry log time (SCRIPT_FMT_TIMING_* only) */
+	FILE *fp; /* file pointer (handler) */
+	ScriptFormat format;
+	char *filename; /* on command line specified name */
+	struct timeval oldtime; /* previous entry log time (SCRIPT_FMT_TIMING_* only) */
 	struct timeval starttime;
 
-	unsigned int	initialized : 1;
+	unsigned int initialized = 1;
 };
 
 struct script_stream {
 	struct script_log **logs;	/* logs where to write data from stream */
 	size_t nlogs;			/* number of logs */
 	char ident;			/* stream identifier */
+	script_stream(char ident) : ident{ ident } {}
+	script_stream() {}
 };
 
 struct script_control {
 	uint64_t outsz;		/* current output files size */
-	uint64_t maxsz;		/* maximum output files size */
+	uint64_t maxsz = 0; /* maximum output files size */
 
 	struct script_stream	out;	/* output */
 	struct script_stream	in;	/* input */
@@ -235,7 +238,7 @@ static struct script_log *get_log_by_name(struct script_stream *stream,
 
 static struct script_log *log_associate(struct script_control *ctl,
 					struct script_stream *stream,
-					const char *filename, int format)
+					const char *filename, ScriptFormat format)
 {
 	struct script_log *log;
 
@@ -252,19 +255,18 @@ static struct script_log *log_associate(struct script_control *ctl,
 	log = get_log_by_name(stream == &ctl->out ? &ctl->in : &ctl->out, filename);
 	if (!log) {
 		/* create a new log */
-		log = xcalloc(1, sizeof(*log));
+		log = static_cast<script_log*>(xcalloc(1, sizeof(*log)));
 		log->filename = xstrdup(filename);
 		log->format = format;
 	}
 
 	/* add log to the stream */
-	stream->logs = xrealloc(stream->logs,
-			(stream->nlogs + 1) * sizeof(log));
+	stream->logs = static_cast<script_log**>(xrealloc(stream->logs, (stream->nlogs + 1) * sizeof(log)));
 	stream->logs[stream->nlogs] = log;
 	stream->nlogs++;
 
 	/* remember where to write info about signals */
-	if (format == SCRIPT_FMT_TIMING_MULTI) {
+	if (format == ScriptFormat::TimingMulti) {
 		if (!ctl->siglog)
 			ctl->siglog = log;
 		if (!ctl->infolog)
@@ -287,7 +289,7 @@ static int log_close(struct script_control *ctl,
 	DBG(MISC, ul_debug("closing %s", log->filename));
 
 	switch (log->format) {
-	case SCRIPT_FMT_RAW:
+	case ScriptFormat::Raw:
 	{
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
@@ -299,7 +301,7 @@ static int log_close(struct script_control *ctl,
 			fprintf(log->fp, _("\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n"), buf, status);
 		break;
 	}
-	case SCRIPT_FMT_TIMING_MULTI:
+	case ScriptFormat::TimingMulti:
 	{
 		struct timeval now = { 0 }, delta = { 0 };
 
@@ -312,7 +314,7 @@ static int log_close(struct script_control *ctl,
 		log_info(ctl, "EXIT_CODE", "%d", status);
 		break;
 	}
-	case SCRIPT_FMT_TIMING_SIMPLE:
+	case ScriptFormat::TimingSimple:
 		break;
 	}
 
@@ -377,7 +379,7 @@ static int log_start(struct script_control *ctl,
 
 	/* open the log */
 	log->fp = fopen(log->filename,
-			ctl->append && log->format == SCRIPT_FMT_RAW ?
+			ctl->append && log->format == ScriptFormat::Raw ?
 			"a" UL_CLOEXECSTR :
 			"w" UL_CLOEXECSTR);
 	if (!log->fp) {
@@ -387,7 +389,7 @@ static int log_start(struct script_control *ctl,
 
 	/* write header, etc. */
 	switch (log->format) {
-	case SCRIPT_FMT_RAW:
+	case ScriptFormat::Raw:
 	{
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
@@ -410,8 +412,8 @@ static int log_start(struct script_control *ctl,
 		fputs("]\n", log->fp);
 		break;
 	}
-	case SCRIPT_FMT_TIMING_SIMPLE:
-	case SCRIPT_FMT_TIMING_MULTI:
+	case ScriptFormat::TimingSimple:
+	case ScriptFormat::TimingMulti:
 		gettime_monotonic(&log->oldtime);
 		gettime_monotonic(&log->starttime);
 		break;
@@ -456,7 +458,7 @@ static ssize_t log_write(struct script_control *ctl,
 	DBG(IO, ul_debug(" writing [file=%s]", log->filename));
 
 	switch (log->format) {
-	case SCRIPT_FMT_RAW:
+	case ScriptFormat::Raw:
 		DBG(IO, ul_debug("  log raw data"));
 
 		// printf("\n\nraw data: %s\n\n", obuf);
@@ -469,7 +471,7 @@ static ssize_t log_write(struct script_control *ctl,
 		ssz = bytes;
 		break;
 
-	case SCRIPT_FMT_TIMING_SIMPLE:
+	case ScriptFormat::TimingSimple:
 		DBG(IO, ul_debug("  log timing info"));
 
 		gettime_monotonic(&now);
@@ -482,7 +484,7 @@ static ssize_t log_write(struct script_control *ctl,
 		log->oldtime = now;
 		break;
 
-	case SCRIPT_FMT_TIMING_MULTI:
+	case ScriptFormat::TimingMulti:
 		DBG(IO, ul_debug("  log multi-stream timing info"));
 
 		gettime_monotonic(&now);
@@ -538,7 +540,7 @@ static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 	if (!log)
 		return 0;
 
-	assert(log->format == SCRIPT_FMT_TIMING_MULTI);
+	assert(log->format == ScriptFormat::TimingMulti);
 	DBG(IO, ul_debug("  writing signal to multi-stream timing"));
 
 	gettime_monotonic(&now);
@@ -579,7 +581,7 @@ static ssize_t log_info(struct script_control *ctl, const char *name, const char
 	if (!log)
 		return 0;
 
-	assert(log->format == SCRIPT_FMT_TIMING_MULTI);
+	assert(log->format == ScriptFormat::TimingMulti);
 	DBG(IO, ul_debug("  writing info to multi-stream log"));
 
 	if (msgfmt) {
@@ -752,12 +754,13 @@ static void die_if_link(struct script_control *ctl, const char *filename)
 
 int main(int argc, char **argv)
 {
-	struct script_control ctl = {
-		.out = { .ident = 'O' },
-		.in  = { .ident = 'I' },
-	};
+	script_control ctl;
+	ctl.out = script_stream('O');
+	ctl.in = script_stream('I');
+
 	struct ul_pty_callbacks *cb;
-	int ch, format = 0, caught_signal = 0, rc = 0, echo = 1;
+	ScriptFormat format = ScriptFormat::Invalid;
+	int ch, caught_signal = 0, rc = 0, echo = 1;
 	const char *outfile = NULL, *infile = NULL;
 	const char *timingfile = NULL, *shell = NULL, *command = NULL;
 
@@ -836,16 +839,16 @@ int main(int argc, char **argv)
 			ctl.force = 1;
 			break;
 		case 'B':
-			log_associate(&ctl, &ctl.in, optarg, SCRIPT_FMT_RAW);
-			log_associate(&ctl, &ctl.out, optarg, SCRIPT_FMT_RAW);
+			log_associate(&ctl, &ctl.in, optarg, ScriptFormat::Raw);
+			log_associate(&ctl, &ctl.out, optarg, ScriptFormat::Raw);
 			infile = outfile = optarg;
 			break;
 		case 'I':
-			log_associate(&ctl, &ctl.in, optarg, SCRIPT_FMT_RAW);
+			log_associate(&ctl, &ctl.in, optarg, ScriptFormat::Raw);
 			infile = optarg;
 			break;
 		case 'O':
-			log_associate(&ctl, &ctl.out, optarg, SCRIPT_FMT_RAW);
+			log_associate(&ctl, &ctl.out, optarg, ScriptFormat::Raw);
 			outfile = optarg;
 			break;
 		case 'o':
@@ -856,9 +859,9 @@ int main(int argc, char **argv)
 			break;
 		case 'm':
 			if (strcasecmp(optarg, "classic") == 0)
-				format = SCRIPT_FMT_TIMING_SIMPLE;
+				format = ScriptFormat::TimingSimple;
 			else if (strcasecmp(optarg, "advanced") == 0)
-				format = SCRIPT_FMT_TIMING_MULTI;
+				format = ScriptFormat::TimingMulti;
 			else
 				errx(EXIT_FAILURE, _("unsupported logging format: '%s'"), optarg);
 			break;
@@ -891,25 +894,26 @@ int main(int argc, char **argv)
 		}
 
 		/* associate stdout with typescript file */
-		log_associate(&ctl, &ctl.out, outfile, SCRIPT_FMT_RAW);
+		log_associate(&ctl, &ctl.out, outfile, ScriptFormat::Raw);
 	}
 
 	if (timingfile) {
 		/* the old SCRIPT_FMT_TIMING_SIMPLE should be used when
 		 * recoding output only (just for backward compatibility),
 		 * otherwise switch to new format. */
-		if (!format)
+		if (format == ScriptFormat::Invalid) {
 			format = infile || (outfile && infile) ?
-					SCRIPT_FMT_TIMING_MULTI :
-					SCRIPT_FMT_TIMING_SIMPLE;
-
-		else if (format == SCRIPT_FMT_TIMING_SIMPLE && outfile && infile)
-			errx(EXIT_FAILURE, _("log multiple streams is mutually "
-					     "exclusive with 'classic' format"));
-		if (outfile)
+			         ScriptFormat::TimingMulti :
+			         ScriptFormat::TimingSimple;
+		} else if (format == ScriptFormat::TimingSimple && outfile && infile) {
+			errx(EXIT_FAILURE, _("log multiple streams is mutually exclusive with 'classic' format"));
+		}
+		if (outfile) {
 			log_associate(&ctl, &ctl.out, timingfile, format);
-		if (infile)
+		}
+		if (infile) {
 			log_associate(&ctl, &ctl.in, timingfile, format);
+		}
 	}
 
 	shell = getenv("SHELL");
@@ -998,7 +1002,7 @@ int main(int argc, char **argv)
 		goto done;
 
 	/* add extra info to advanced timing file */
-	if (timingfile && format == SCRIPT_FMT_TIMING_MULTI) {
+	if (timingfile && format == ScriptFormat::TimingMulti) {
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
 
@@ -1022,14 +1026,14 @@ int main(int argc, char **argv)
 			log_info(&ctl, "INPUT_LOG", "%s", infile);
 	}
 
-        /* this is the main loop */
+	// this is the main loop
 	rc = ul_pty_proxy_master(ctl.pty);
 
-	/* all done; cleanup and kill */
+	// all done; cleanup and kill
 	caught_signal = ul_pty_get_delivered_signal(ctl.pty);
 
 	if (!caught_signal && ctl.child != (pid_t)-1)
-		ul_pty_wait_for_child(ctl.pty);	/* final wait */
+		ul_pty_wait_for_child(ctl.pty); // final wait
 
 	if (caught_signal && ctl.child != (pid_t)-1) {
 		fprintf(stderr, "\nSession terminated, killing shell...");
