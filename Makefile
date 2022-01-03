@@ -1,6 +1,5 @@
-CC = gcc
 CXX = g++
-CFLAGS = -include config.h
+CFLAGS = -include config.h -g
 LDFLAGS = -lutil
 
 OBJ = ttyutils.o timeutils.o monotonic.o signames.o strutils.o pty-session.o

@@ -104,18 +104,19 @@ enum class ScriptFormat {
 	TimingMulti, // (advanced) multiple streams in format "<type> <delta> <offset|etc>
 };
 
-struct script_log {
-	FILE *fp; /* file pointer (handler) */
+class ScriptLog {
+public:
+	FILE *fp = nullptr; /* file pointer (handler) */
 	ScriptFormat format;
 	char *filename; /* on command line specified name */
 	struct timeval oldtime; /* previous entry log time (SCRIPT_FMT_TIMING_* only) */
 	struct timeval starttime;
 
-	unsigned int initialized = 1;
+	unsigned int initialized = 0;
 };
 
 struct script_stream {
-	struct script_log **logs;	/* logs where to write data from stream */
+	ScriptLog **logs;	/* logs where to write data from stream */
 	size_t nlogs;			/* number of logs */
 	char ident;			/* stream identifier */
 	script_stream(char ident) : ident{ ident } {}
@@ -129,8 +130,8 @@ struct script_control {
 	struct script_stream	out;	/* output */
 	struct script_stream	in;	/* input */
 
-	struct script_log	*siglog;	/* log for signal entries */
-	struct script_log	*infolog;	/* log for info entries */
+	ScriptLog	*siglog;	/* log for signal entries */
+	ScriptLog	*infolog;	/* log for info entries */
 
 	const char *ttyname;
 	const char *ttytype;
@@ -223,24 +224,24 @@ static void __attribute__((__noreturn__)) usage(void)
 	exit(EXIT_SUCCESS);
 }
 
-static struct script_log *get_log_by_name(struct script_stream *stream,
+static ScriptLog *get_log_by_name(struct script_stream *stream,
 					  const char *name)
 {
 	size_t i;
 
 	for (i = 0; i < stream->nlogs; i++) {
-		struct script_log *log = stream->logs[i];
+		ScriptLog *log = stream->logs[i];
 		if (strcmp(log->filename, name) == 0)
 			return log;
 	}
 	return NULL;
 }
 
-static struct script_log *log_associate(struct script_control *ctl,
+static ScriptLog *log_associate(struct script_control *ctl,
 					struct script_stream *stream,
 					const char *filename, ScriptFormat format)
 {
-	struct script_log *log;
+	ScriptLog *log;
 
 	DBG(MISC, ul_debug("associate %s with stream", filename));
 
@@ -255,13 +256,13 @@ static struct script_log *log_associate(struct script_control *ctl,
 	log = get_log_by_name(stream == &ctl->out ? &ctl->in : &ctl->out, filename);
 	if (!log) {
 		/* create a new log */
-		log = static_cast<script_log*>(xcalloc(1, sizeof(*log)));
+		log = static_cast<ScriptLog*>(xcalloc(1, sizeof(*log)));
 		log->filename = xstrdup(filename);
 		log->format = format;
 	}
 
 	/* add log to the stream */
-	stream->logs = static_cast<script_log**>(xrealloc(stream->logs, (stream->nlogs + 1) * sizeof(log)));
+	stream->logs = static_cast<ScriptLog**>(xrealloc(stream->logs, (stream->nlogs + 1) * sizeof(log)));
 	stream->logs[stream->nlogs] = log;
 	stream->nlogs++;
 
@@ -277,7 +278,7 @@ static struct script_log *log_associate(struct script_control *ctl,
 }
 
 static int log_close(struct script_control *ctl,
-		      struct script_log *log,
+		      ScriptLog *log,
 		      const char *msg,
 		      int status)
 {
@@ -329,7 +330,7 @@ static int log_close(struct script_control *ctl,
 	return rc;
 }
 
-static int log_flush(struct script_control *ctl __attribute__((__unused__)), struct script_log *log)
+static int log_flush(struct script_control *ctl __attribute__((__unused__)), ScriptLog *log)
 {
 
 	if (!log || !log->initialized)
@@ -341,7 +342,7 @@ static int log_flush(struct script_control *ctl __attribute__((__unused__)), str
 	return 0;
 }
 
-static void log_free(struct script_control *ctl, struct script_log *log)
+static void log_free(struct script_control *ctl, ScriptLog *log)
 {
 	size_t i;
 
@@ -368,7 +369,7 @@ static void log_free(struct script_control *ctl, struct script_log *log)
 }
 
 static int log_start(struct script_control *ctl,
-		      struct script_log *log)
+		      ScriptLog *log)
 {
 	if (log->initialized)
 		return 0;
@@ -445,7 +446,7 @@ static int logging_start(struct script_control *ctl)
 
 static ssize_t log_write(struct script_control *ctl,
 		      struct script_stream *stream,
-		      struct script_log *log,
+		      ScriptLog *log,
 		      char *obuf, size_t bytes)
 {
 	int rc;
@@ -528,7 +529,7 @@ static ssize_t log_stream_activity(
 static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 	log_signal(struct script_control *ctl, int signum, const char *msgfmt, ...)
 {
-	struct script_log *log;
+	ScriptLog *log;
 	struct timeval now, delta;
 	char msg[BUFSIZ] = {0};
 	va_list ap;
@@ -570,7 +571,7 @@ static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 
 static ssize_t log_info(struct script_control *ctl, const char *name, const char *msgfmt, ...)
 {
-	struct script_log *log;
+	ScriptLog *log;
 	char msg[BUFSIZ] = {0};
 	va_list ap;
 	ssize_t sz;
@@ -618,7 +619,7 @@ static void logging_done(struct script_control *ctl, const char *msg)
 
 	/* close all output logs */
 	for (i = 0; i < ctl->out.nlogs; i++) {
-		struct script_log *log = ctl->out.logs[i];
+		ScriptLog *log = ctl->out.logs[i];
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
@@ -628,7 +629,7 @@ static void logging_done(struct script_control *ctl, const char *msg)
 
 	/* close all input logs */
 	for (i = 0; i < ctl->in.nlogs; i++) {
-		struct script_log *log = ctl->in.logs[i];
+		ScriptLog *log = ctl->in.logs[i];
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
