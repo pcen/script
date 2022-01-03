@@ -661,7 +661,7 @@ char *size_to_human_string(int options, uint64_t bytes)
 		int len;
 
 		if (!dp || !*dp)
-			dp = ".";
+			dp = strdup(".");
 
 		len = snprintf(buf, sizeof(buf), "%d%s%02" PRIu64, dec, dp, frac);
 		if (len > 0 && (size_t) len < sizeof(buf)) {

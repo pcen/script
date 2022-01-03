@@ -328,7 +328,7 @@ static int log_close(ScriptControl *ctl,
 		gettime_monotonic(&now);
 		timersub(&now, &log->starttime, &delta);
 
-		log_info(ctl, "DURATION", "%"PRId64".%06"PRId64,
+		log_info(ctl, "DURATION", "%ld.%06ld",
 			(int64_t)delta.tv_sec,
 			(int64_t)delta.tv_usec);
 		log_info(ctl, "EXIT_CODE", "%d", status);
@@ -496,7 +496,7 @@ static ssize_t log_write(ScriptControl *ctl,
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = fprintf(log->fp, "%"PRId64".%06"PRId64" %zd\n",
+		ssz = fprintf(log->fp, "%ld.%06ld %zd\n",
 			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
 		if (ssz < 0)
 			return -errno;
@@ -509,7 +509,7 @@ static ssize_t log_write(ScriptControl *ctl,
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = fprintf(log->fp, "%c %"PRId64".%06"PRId64" %zd\n",
+		ssz = fprintf(log->fp, "%c %ld.%06ld %zd\n",
 			stream->ident,
 			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
 		if (ssz < 0)
@@ -576,11 +576,11 @@ static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 	}
 
 	if (*msg)
-		sz = fprintf(log->fp, "S %"PRId64".%06"PRId64" SIG%s %s\n",
+		sz = fprintf(log->fp, "S %ld.%06ld SIG%s %s\n",
 			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec,
 			signum_to_signame(signum), msg);
 	else
-		sz = fprintf(log->fp, "S %"PRId64".%06"PRId64" SIG%s\n",
+		sz = fprintf(log->fp, "S %ld.%06ld SIG%s\n",
 			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec,
 			signum_to_signame(signum));
 
@@ -704,8 +704,8 @@ static int callback_log_stream_activity(void *data, int fd, char *buf, size_t bu
 	/* check output limit */
 	if (ctl->maxsz != 0 && ctl->outsz >= ctl->maxsz) {
 		if (!ctl->quiet)
-			printf(_("Script terminated, max output files size %"PRIu64" exceeded.\n"), ctl->maxsz);
-		DBG(IO, ul_debug("output size %"PRIu64", exceeded limit %"PRIu64, ctl->outsz, ctl->maxsz));
+			printf(_("Script terminated, max output files size %lu exceeded.\n"), ctl->maxsz);
+		DBG(IO, ul_debug("output size %lu, exceeded limit %lu", ctl->outsz, ctl->maxsz));
 		logging_done(ctl, _("max output size exceeded"));
 		return 1;
 	}
