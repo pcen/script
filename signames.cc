@@ -15,7 +15,6 @@
 #include <errno.h>
 
 #include "c.h"
-#include "strutils.h"
 #include "signames.h"
 
 static const struct ul_signal_name {

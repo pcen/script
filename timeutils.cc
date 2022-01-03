@@ -26,9 +26,10 @@
 #include <sys/time.h>
 #include <inttypes.h>
 
+#include "strutils.h"
+
 #include "c.h"
 #include "nls.h"
-#include "strutils.h"
 #include "timeutils.h"
 
 #define WHITESPACE " \t\n\r"

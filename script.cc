@@ -55,6 +55,8 @@
 #include <assert.h>
 #include <inttypes.h>
 
+#include <string>
+
 #include "closestream.h"
 #include "nls.h"
 #include "c.h"
@@ -62,7 +64,6 @@
 #include "all-io.h"
 #include "monotonic.h"
 #include "timeutils.h"
-#include "strutils.h"
 #include "xalloc.h"
 #include "optutils.h"
 #include "signames.h"
@@ -872,7 +873,7 @@ int main(int argc, char **argv)
 			outfile = optarg;
 			break;
 		case 'o':
-			ctl.maxsz = strtosize_or_err(optarg, _("failed to parse output limit size"));
+			ctl.maxsz = std::stoul(optarg);
 			break;
 		case 'q':
 			ctl.quiet = true;
