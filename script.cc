@@ -56,6 +56,7 @@
 #include <inttypes.h>
 
 #include <string>
+#include <ctime>
 
 #include "closestream.h"
 #include "nls.h"
@@ -63,7 +64,6 @@
 #include "ttyutils.h"
 #include "all-io.h"
 #include "monotonic.h"
-#include "timeutils.h"
 #include "xalloc.h"
 #include "optutils.h"
 #include "signames.h"
@@ -88,6 +88,8 @@ auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
 #endif
 
 auto constexpr DEFAULT_TYPESCRIPT_FILENAME = "typescript";
+
+auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
 /*
  * Script is driven by stream (stdout/stdin) activity. It's possible to
@@ -314,8 +316,9 @@ static int log_close(ScriptControl *ctl,
 	{
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
+		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
+		// strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
 		if (msg)
 			fprintf(log->fp, _("\nScript done on %s [<%s>]\n"), buf, msg);
 		else
@@ -414,8 +417,9 @@ static int log_start(ScriptControl *ctl,
 	{
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
+		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
+		// strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
 		fprintf(log->fp, _("Script started on %s ["), buf);
 
 		if (ctl->isterm) {
@@ -1026,8 +1030,9 @@ int main(int argc, char **argv)
 	if (timingfile && format == ScriptFormat::TimingMulti) {
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = script_time((time_t *)NULL);
+		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
+		//strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
 
-		strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
 		log_info(&ctl, "START_TIME", "%s", buf);
 
 		if (ctl.isterm) {
