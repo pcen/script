@@ -1,0 +1,5 @@
+*.o
+script
+util-linux
+.vscode
+typescript
