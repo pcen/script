@@ -86,7 +86,7 @@ auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
 # include <utempter.h>
 #endif
 
-#define DEFAULT_TYPESCRIPT_FILENAME "typescript"
+auto constexpr DEFAULT_TYPESCRIPT_FILENAME = "typescript";
 
 /*
  * Script is driven by stream (stdout/stdin) activity. It's possible to
@@ -115,20 +115,21 @@ public:
 	unsigned int initialized = 0;
 };
 
-struct script_stream {
-	ScriptLog **logs;	/* logs where to write data from stream */
-	size_t nlogs;			/* number of logs */
-	char ident;			/* stream identifier */
-	script_stream(char ident) : ident{ ident } {}
-	script_stream() {}
+class ScriptStream {
+public:
+	ScriptLog **logs = nullptr; /* logs where to write data from stream */
+	size_t nlogs = 0; /* number of logs */
+	char ident; /* stream identifier */
+	ScriptStream(char ident) : ident{ ident } {}
+	ScriptStream() {}
 };
 
 struct script_control {
 	uint64_t outsz;		/* current output files size */
 	uint64_t maxsz = 0; /* maximum output files size */
 
-	struct script_stream	out;	/* output */
-	struct script_stream	in;	/* input */
+	ScriptStream out;	/* output */
+	ScriptStream in;	/* input */
 
 	ScriptLog	*siglog;	/* log for signal entries */
 	ScriptLog	*infolog;	/* log for info entries */
@@ -224,7 +225,7 @@ static void __attribute__((__noreturn__)) usage(void)
 	exit(EXIT_SUCCESS);
 }
 
-static ScriptLog *get_log_by_name(struct script_stream *stream,
+static ScriptLog *get_log_by_name(ScriptStream *stream,
 					  const char *name)
 {
 	size_t i;
@@ -238,7 +239,7 @@ static ScriptLog *get_log_by_name(struct script_stream *stream,
 }
 
 static ScriptLog *log_associate(struct script_control *ctl,
-					struct script_stream *stream,
+					ScriptStream *stream,
 					const char *filename, ScriptFormat format)
 {
 	ScriptLog *log;
@@ -445,7 +446,7 @@ static int logging_start(struct script_control *ctl)
 }
 
 static ssize_t log_write(struct script_control *ctl,
-		      struct script_stream *stream,
+		      ScriptStream *stream,
 		      ScriptLog *log,
 		      char *obuf, size_t bytes)
 {
@@ -509,7 +510,7 @@ static ssize_t log_write(struct script_control *ctl,
 
 static ssize_t log_stream_activity(
 			struct script_control *ctl,
-			struct script_stream *stream,
+			ScriptStream *stream,
 			char *buf, size_t bytes)
 {
 	size_t i;
@@ -756,8 +757,8 @@ static void die_if_link(struct script_control *ctl, const char *filename)
 int main(int argc, char **argv)
 {
 	script_control ctl;
-	ctl.out = script_stream('O');
-	ctl.in = script_stream('I');
+	ctl.out = ScriptStream('O');
+	ctl.in = ScriptStream('I');
 
 	struct ul_pty_callbacks *cb;
 	ScriptFormat format = ScriptFormat::Invalid;
