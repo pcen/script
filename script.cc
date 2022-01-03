@@ -106,53 +106,71 @@ enum class ScriptFormat {
 
 class ScriptLog {
 public:
-	FILE *fp = nullptr; /* file pointer (handler) */
+	FILE *fp; // file pointer (handler)
 	ScriptFormat format;
-	char *filename; /* on command line specified name */
-	struct timeval oldtime; /* previous entry log time (SCRIPT_FMT_TIMING_* only) */
+	char *filename; // on command line specified name
+	struct timeval oldtime; // previous entry log time (timing script only)
 	struct timeval starttime;
+	unsigned int initialized;
 
-	unsigned int initialized = 0;
+	ScriptLog() : fp{ nullptr }, initialized{ 0 } {}
 };
 
 class ScriptStream {
 public:
-	ScriptLog **logs = nullptr; /* logs where to write data from stream */
-	size_t nlogs = 0; /* number of logs */
-	char ident; /* stream identifier */
-	ScriptStream(char ident) : ident{ ident } {}
-	ScriptStream() {}
+	ScriptLog **logs; // logs where to write data from stream
+	size_t nlogs; // number of logs
+	char ident; // stream identifier
+	ScriptStream(char ident = '\0') : logs{ nullptr }, nlogs{ 0 }, ident{ ident } {}
 };
 
-struct script_control {
-	uint64_t outsz;		/* current output files size */
-	uint64_t maxsz = 0; /* maximum output files size */
+class ScriptControl {
+public:
+	uint64_t outsz; // current output files size
+	uint64_t maxsz; // maximum output files size
 
-	ScriptStream out;	/* output */
-	ScriptStream in;	/* input */
+	ScriptStream out; // output
+	ScriptStream in; // input
 
-	ScriptLog	*siglog;	/* log for signal entries */
-	ScriptLog	*infolog;	/* log for info entries */
+	ScriptLog *siglog; // log for signal entries
+	ScriptLog *infolog; // log for info entries
 
 	const char *ttyname;
 	const char *ttytype;
 	int ttycols;
 	int ttylines;
 
-	struct ul_pty *pty;	/* pseudo-terminal */
-	pid_t child;		/* child pid */
-	int childstatus;	/* child process exit value */
+	struct ul_pty *pty; // pseudo-terminal
+	pid_t child; // child pid
+	int childstatus; // child process exit value
 
-	unsigned int
-	 append:1,		/* append output */
-	 rc_wanted:1,		/* return child exit value */
-	 flush:1,		/* flush after each write */
-	 quiet:1,		/* suppress most output */
-	 force:1,		/* write output to links */
-	 isterm:1;		/* is child process running as terminal */
+	bool append; // append output
+	bool rc_wanted; // return child exit value
+	bool flush; // flush after each write
+	bool quiet; // suppress most output
+	bool force; // write output to links
+	bool isterm; // is child process running as terminal
+
+	ScriptControl()
+		: outsz{ 0 },
+		maxsz{ 0 },
+		siglog{ nullptr },
+		infolog{ nullptr },
+		ttyname{ nullptr },
+		ttytype{ nullptr },
+		ttycols{ 0 },
+		ttylines{ 0 },
+		pty{ nullptr },
+		childstatus{ 0 },
+		append{ false },
+		rc_wanted{ false },
+		flush{ false },
+		quiet{ false },
+		force{ false },
+		isterm{ false } {}
 };
 
-static ssize_t log_info(struct script_control *ctl, const char *name, const char *msgfmt, ...)
+static ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...)
 			__attribute__((__format__ (__printf__, 3, 4)));
 
 static void script_init_debug(void)
@@ -160,7 +178,7 @@ static void script_init_debug(void)
 	__UL_INIT_DEBUG_FROM_ENV(script, SCRIPT_DEBUG_, 0, SCRIPT_DEBUG);
 }
 
-static void init_terminal_info(struct script_control *ctl)
+static void init_terminal_info(ScriptControl *ctl)
 {
 	if (ctl->ttyname || !ctl->isterm)
 		return;		/* already initialized */
@@ -238,7 +256,7 @@ static ScriptLog *get_log_by_name(ScriptStream *stream,
 	return NULL;
 }
 
-static ScriptLog *log_associate(struct script_control *ctl,
+static ScriptLog *log_associate(ScriptControl *ctl,
 					ScriptStream *stream,
 					const char *filename, ScriptFormat format)
 {
@@ -278,7 +296,7 @@ static ScriptLog *log_associate(struct script_control *ctl,
 	return log;
 }
 
-static int log_close(struct script_control *ctl,
+static int log_close(ScriptControl *ctl,
 		      ScriptLog *log,
 		      const char *msg,
 		      int status)
@@ -331,7 +349,7 @@ static int log_close(struct script_control *ctl,
 	return rc;
 }
 
-static int log_flush(struct script_control *ctl __attribute__((__unused__)), ScriptLog *log)
+static int log_flush(ScriptControl *ctl __attribute__((__unused__)), ScriptLog *log)
 {
 
 	if (!log || !log->initialized)
@@ -343,7 +361,7 @@ static int log_flush(struct script_control *ctl __attribute__((__unused__)), Scr
 	return 0;
 }
 
-static void log_free(struct script_control *ctl, ScriptLog *log)
+static void log_free(ScriptControl *ctl, ScriptLog *log)
 {
 	size_t i;
 
@@ -369,7 +387,7 @@ static void log_free(struct script_control *ctl, ScriptLog *log)
 	free(log);
 }
 
-static int log_start(struct script_control *ctl,
+static int log_start(ScriptControl *ctl,
 		      ScriptLog *log)
 {
 	if (log->initialized)
@@ -425,7 +443,7 @@ static int log_start(struct script_control *ctl,
 	return 0;
 }
 
-static int logging_start(struct script_control *ctl)
+static int logging_start(ScriptControl *ctl)
 {
 	size_t i;
 
@@ -445,7 +463,7 @@ static int logging_start(struct script_control *ctl)
 	return 0;
 }
 
-static ssize_t log_write(struct script_control *ctl,
+static ssize_t log_write(ScriptControl *ctl,
 		      ScriptStream *stream,
 		      ScriptLog *log,
 		      char *obuf, size_t bytes)
@@ -509,7 +527,7 @@ static ssize_t log_write(struct script_control *ctl,
 }
 
 static ssize_t log_stream_activity(
-			struct script_control *ctl,
+			ScriptControl *ctl,
 			ScriptStream *stream,
 			char *buf, size_t bytes)
 {
@@ -528,7 +546,7 @@ static ssize_t log_stream_activity(
 }
 
 static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
-	log_signal(struct script_control *ctl, int signum, const char *msgfmt, ...)
+	log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...)
 {
 	ScriptLog *log;
 	struct timeval now, delta;
@@ -570,7 +588,7 @@ static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 	return sz;
 }
 
-static ssize_t log_info(struct script_control *ctl, const char *name, const char *msgfmt, ...)
+static ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...)
 {
 	ScriptLog *log;
 	char msg[BUFSIZ] = {0};
@@ -604,7 +622,7 @@ static ssize_t log_info(struct script_control *ctl, const char *name, const char
 }
 
 
-static void logging_done(struct script_control *ctl, const char *msg)
+static void logging_done(ScriptControl *ctl, const char *msg)
 {
 	int status;
 	size_t i;
@@ -644,7 +662,7 @@ static void callback_child_die(
 			pid_t child __attribute__((__unused__)),
 			int status)
 {
-	struct script_control *ctl = (struct script_control *) data;
+	ScriptControl *ctl = (ScriptControl *) data;
 
 	ctl->child = (pid_t) -1;
 	ctl->childstatus = status;
@@ -662,7 +680,7 @@ static void callback_child_sigstop(
 
 static int callback_log_stream_activity(void *data, int fd, char *buf, size_t bufsz)
 {
-	struct script_control *ctl = (struct script_control *) data;
+	ScriptControl *ctl = (ScriptControl *) data;
 	ssize_t ssz = 0;
 
 	DBG(IO, ul_debug("stream activity callback"));
@@ -696,7 +714,7 @@ static int callback_log_stream_activity(void *data, int fd, char *buf, size_t bu
 
 static int callback_log_signal(void *data, struct signalfd_siginfo *info, void *sigdata)
 {
-	struct script_control *ctl = (struct script_control *) data;
+	ScriptControl *ctl = (ScriptControl *) data;
 	ssize_t ssz = 0;
 
 	switch (info->ssi_signo) {
@@ -724,7 +742,7 @@ static int callback_log_signal(void *data, struct signalfd_siginfo *info, void *
 
 static int callback_flush_logs(void *data)
 {
-	struct script_control *ctl = (struct script_control *) data;
+	ScriptControl *ctl = (ScriptControl *) data;
 	size_t i;
 
 	for (i = 0; i < ctl->out.nlogs; i++) {
@@ -741,7 +759,7 @@ static int callback_flush_logs(void *data)
 	return 0;
 }
 
-static void die_if_link(struct script_control *ctl, const char *filename)
+static void die_if_link(ScriptControl *ctl, const char *filename)
 {
 	struct stat s;
 
@@ -756,7 +774,7 @@ static void die_if_link(struct script_control *ctl, const char *filename)
 
 int main(int argc, char **argv)
 {
-	script_control ctl;
+	ScriptControl ctl;
 	ctl.out = ScriptStream('O');
 	ctl.in = ScriptStream('I');
 
@@ -816,7 +834,7 @@ int main(int argc, char **argv)
 
 		switch (ch) {
 		case 'a':
-			ctl.append = 1;
+			ctl.append = true;
 			break;
 		case 'c':
 			command = optarg;
@@ -832,13 +850,13 @@ int main(int argc, char **argv)
 				errx(EXIT_FAILURE, _("unssuported echo mode: '%s'"), optarg);
 			break;
 		case 'e':
-			ctl.rc_wanted = 1;
+			ctl.rc_wanted = true;
 			break;
 		case 'f':
-			ctl.flush = 1;
+			ctl.flush = true;
 			break;
 		case FORCE_OPTION:
-			ctl.force = 1;
+			ctl.force = true;
 			break;
 		case 'B':
 			log_associate(&ctl, &ctl.in, optarg, ScriptFormat::Raw);
@@ -857,7 +875,7 @@ int main(int argc, char **argv)
 			ctl.maxsz = strtosize_or_err(optarg, _("failed to parse output limit size"));
 			break;
 		case 'q':
-			ctl.quiet = 1;
+			ctl.quiet = true;
 			break;
 		case 'm':
 			if (strcasecmp(optarg, "classic") == 0)

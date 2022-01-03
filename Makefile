@@ -12,4 +12,4 @@ script: script.o $(OBJ)
 
 .PHONY: clean
 clean:
-	rm *.o script typescript
+	-rm *.o script typescript
