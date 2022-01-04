@@ -56,6 +56,7 @@
 #include <inttypes.h>
 
 #include <string>
+#include <vector>
 #include <ctime>
 
 #include "closestream.h"
@@ -63,7 +64,6 @@
 #include "ttyutils.h"
 #include "all-io.h"
 #include "monotonic.h"
-#include "xalloc.h"
 #include "optutils.h"
 #include "signames.h"
 #include "pty-session.h"
@@ -110,7 +110,7 @@ class ScriptLog {
 public:
 	FILE *fp; // file pointer (handler)
 	ScriptFormat format;
-	char *filename; // on command line specified name
+	std::string filename; // on command line specified name
 	struct timeval oldtime; // previous entry log time (timing script only)
 	struct timeval starttime;
 	unsigned int initialized;
@@ -120,10 +120,10 @@ public:
 
 class ScriptStream {
 public:
-	ScriptLog **logs; // logs where to write data from stream
+	std::vector<ScriptLog*> logs; // logs where to write data from stream
 	size_t nlogs; // number of logs
 	char ident; // stream identifier
-	ScriptStream(char ident = '\0') : logs{ nullptr }, nlogs{ 0 }, ident{ ident } {}
+	ScriptStream(char ident = '\0') : nlogs{ 0 }, ident{ ident } {}
 };
 
 class ScriptControl {
@@ -245,29 +245,27 @@ static void __attribute__((__noreturn__)) usage(void)
 	exit(EXIT_SUCCESS);
 }
 
-static ScriptLog *get_log_by_name(ScriptStream *stream,
-					  const char *name)
+ScriptLog *get_log_by_name(ScriptStream *stream, const std::string& name)
 {
 	size_t i;
 
 	for (i = 0; i < stream->nlogs; i++) {
-		ScriptLog *log = stream->logs[i];
-		if (strcmp(log->filename, name) == 0)
+		ScriptLog* log = stream->logs[i];
+		if (log->filename == name) {
 			return log;
+		}
 	}
-	return NULL;
+	return nullptr;
 }
 
-static ScriptLog *log_associate(ScriptControl *ctl,
-					ScriptStream *stream,
-					const char *filename, ScriptFormat format)
-{
+#include <iostream>
+
+ScriptLog *log_associate(ScriptControl *ctl, ScriptStream *stream, const std::string& filename, ScriptFormat format) {
 	ScriptLog *log;
 
 	DBG(MISC, ul_debug("associate %s with stream", filename));
 
 	assert(ctl);
-	assert(filename);
 	assert(stream);
 
 	log = get_log_by_name(stream, filename);
@@ -277,15 +275,22 @@ static ScriptLog *log_associate(ScriptControl *ctl,
 	log = get_log_by_name(stream == &ctl->out ? &ctl->in : &ctl->out, filename);
 	if (!log) {
 		/* create a new log */
-		log = static_cast<ScriptLog*>(xcalloc(1, sizeof(*log)));
-		log->filename = xstrdup(filename);
+		std::cerr << "Creating new log\n";
+		log = new ScriptLog();
+		log->filename = filename;
 		log->format = format;
 	}
 
+	std::cerr << "adding log...\n";
 	/* add log to the stream */
-	stream->logs = static_cast<ScriptLog**>(xrealloc(stream->logs, (stream->nlogs + 1) * sizeof(log)));
-	stream->logs[stream->nlogs] = log;
+	stream->logs.push_back(log);
 	stream->nlogs++;
+
+	std::cerr << "number of logs: " << stream->logs.size() << "\n";
+	for (auto l : stream->logs) {
+		if (l == nullptr) std::cerr << "log is nullptr!!\n";
+		std::cerr << "log: " << l->filename << "\n";
+	}
 
 	/* remember where to write info about signals */
 	if (format == ScriptFormat::TimingMulti) {
@@ -298,11 +303,7 @@ static ScriptLog *log_associate(ScriptControl *ctl,
 	return log;
 }
 
-static int log_close(ScriptControl *ctl,
-		      ScriptLog *log,
-		      const char *msg,
-		      int status)
-{
+int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 	int rc = 0;
 
 	if (!log || !log->initialized)
@@ -346,7 +347,6 @@ static int log_close(ScriptControl *ctl,
 		rc = -errno;
 	}
 
-	free(log->filename);
 	memset(log, 0, sizeof(*log));
 
 	return rc;
@@ -401,7 +401,7 @@ static int log_start(ScriptControl *ctl,
 	assert(log->fp == NULL);
 
 	/* open the log */
-	log->fp = fopen(log->filename,
+	log->fp = fopen(log->filename.c_str(),
 			ctl->append && log->format == ScriptFormat::Raw ?
 			"a" UL_CLOEXECSTR :
 			"w" UL_CLOEXECSTR);
@@ -646,8 +646,10 @@ static void logging_done(ScriptControl *ctl, const char *msg)
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
-	free(ctl->out.logs);
-	ctl->out.logs = NULL;
+	for (auto log : ctl->out.logs) {
+		delete log;
+	}
+	ctl->out.logs.clear();
 	ctl->out.nlogs = 0;
 
 	/* close all input logs */
@@ -656,8 +658,10 @@ static void logging_done(ScriptControl *ctl, const char *msg)
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
-	free(ctl->in.logs);
-	ctl->in.logs = NULL;
+	for (auto log : ctl->in.logs) {
+		delete log;
+	}
+	ctl->in.logs.clear();
 	ctl->in.nlogs = 0;
 }
 

@@ -143,30 +143,6 @@
 # define FALSE 0
 #endif
 
-#ifndef min
-# define min(x, y) __extension__ ({		\
-	__typeof__(x) _min1 = (x);		\
-	__typeof__(y) _min2 = (y);		\
-	(void) (&_min1 == &_min2);		\
-	_min1 < _min2 ? _min1 : _min2; })
-#endif
-
-#ifndef max
-# define max(x, y) __extension__ ({		\
-	__typeof__(x) _max1 = (x);		\
-	__typeof__(y) _max2 = (y);		\
-	(void) (&_max1 == &_max2);		\
-	_max1 > _max2 ? _max1 : _max2; })
-#endif
-
-#ifndef abs_diff
-# define abs_diff(x, y) __extension__ ({        \
-	__typeof__(x) _a = (x);			\
-	__typeof__(y) _b = (y);			\
-	(void) (&_a == &_b);			\
-	_a > _b ? _a - _b : _b - _a; })
-#endif
-
 #ifndef cmp_numbers
 # define cmp_numbers(x, y) __extension__ ({	\
 	__typeof__(x) _a = (x);			\

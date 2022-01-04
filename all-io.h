@@ -6,8 +6,8 @@
  *            Petr Uzel <petr.uzel@suse.cz>
  */
 
-#ifndef UTIL_LINUX_ALL_IO_H
-#define UTIL_LINUX_ALL_IO_H
+#ifndef ALL_IO_H
+#define ALL_IO_H
 
 #include <string.h>
 #include <unistd.h>
@@ -19,8 +19,7 @@
 
 #include "c.h"
 
-static inline int write_all(int fd, const void *buf, size_t count)
-{
+inline int write_all(int fd, const void *buf, size_t count) {
 	while (count) {
 		ssize_t tmp;
 
@@ -32,15 +31,13 @@ static inline int write_all(int fd, const void *buf, size_t count)
 				buf = (const void *) ((const char *) buf + tmp);
 		} else if (errno != EINTR && errno != EAGAIN)
 			return -1;
-		if (errno == EAGAIN)	/* Try later, *sigh* */
+		if (errno == EAGAIN) /* Try later, *sigh* */
 			xusleep(250000);
 	}
 	return 0;
 }
 
-static inline int fwrite_all(const void *ptr, size_t size,
-			     size_t nmemb, FILE *stream)
-{
+inline int fwrite_all(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
 	while (nmemb) {
 		size_t tmp;
 
@@ -52,14 +49,13 @@ static inline int fwrite_all(const void *ptr, size_t size,
 				ptr = (const void *) ((const char *) ptr + (tmp * size));
 		} else if (errno != EINTR && errno != EAGAIN)
 			return -1;
-		if (errno == EAGAIN)	/* Try later, *sigh* */
+		if (errno == EAGAIN) /* Try later, *sigh* */
 			xusleep(250000);
 	}
 	return 0;
 }
 
-static inline ssize_t read_all(int fd, char *buf, size_t count)
-{
+inline ssize_t read_all(int fd, char *buf, size_t count) {
 	ssize_t ret;
 	ssize_t c = 0;
 	int tries = 0;
@@ -84,31 +80,4 @@ static inline ssize_t read_all(int fd, char *buf, size_t count)
 	return c;
 }
 
-static inline ssize_t sendfile_all(int out, int in, off_t *off, size_t count)
-{
-#if defined(HAVE_SENDFILE) && defined(__linux__)
-	ssize_t ret;
-	ssize_t c = 0;
-	int tries = 0;
-	while (count) {
-		ret = sendfile(out, in, off, count);
-		if (ret < 0) {
-			if ((errno == EAGAIN || errno == EINTR) && (tries++ < 5)) {
-				xusleep(250000);
-				continue;
-			}
-			return c ? c : -1;
-		}
-		if (ret == 0)
-			return c;
-		tries = 0;
-		count -= ret;
-		c += ret;
-	}
-	return c;
-#else
-	errno = ENOSYS;
-	return -1;
-#endif
-}
-#endif /* UTIL_LINUX_ALL_IO_H */
+#endif // ALL_IO_H
