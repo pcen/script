@@ -42,6 +42,7 @@ public:
 
 	ScriptStream out; // output
 	ScriptStream in; // input
+	ScriptStream err; // error
 
 	ScriptLog *siglog; // log for signal entries
 	ScriptLog *infolog; // log for info entries

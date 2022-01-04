@@ -10,7 +10,6 @@
 #include <termios.h>
 #include <signal.h>
 #include <sys/time.h>
-#include <sys/stat.h>
 
 #include <sys/signalfd.h>
 
@@ -41,7 +40,7 @@ public:
 	 * ul_pty_set_mainloop_time(). The callback is no used when time is not set.
 	 */
 	virtual bool ptyUseMainLoop() { return false; }
-	virtual int ptyMainLoop() {};
+	virtual int ptyMainLoop() { return 0; };
 
 	/*
 	 * Executed on master or stdin activity, arguments:

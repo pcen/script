@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <inttypes.h>
+#include <sys/stat.h>
 
 #include <cassert>
 

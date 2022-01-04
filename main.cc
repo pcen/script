@@ -2,8 +2,9 @@
 
 #include <iostream>
 #include <ctime>
+#include <filesystem>
+#include <unordered_map>
 
-#include <getopt.h>
 #include <unistd.h>
 #include <limits.h>
 #include <err.h>
@@ -31,7 +32,6 @@ void usage(void) {
 	fputs("\n", out);
 
 	fputs(" -T, --log-timing <file>       log timing information to file\n", out);
-	fputs(" -t[<file>], --timing[=<file>] deprecated alias to -T (default file is stderr)\n", out);
 	fputs(" -m, --logging-format <name>   force to 'classic' or 'advanced' format\n", out);
 	fputs("\n", out);
 
@@ -51,51 +51,104 @@ void usage(void) {
 	exit(EXIT_SUCCESS);
 }
 
-void die_if_link(const ScriptControl& ctl, const char *filename) {
-	struct stat s;
-
-	if (ctl.force)
+void dieIfLink(const ScriptControl& ctl, const char *filename) {
+	if (ctl.force) {
 		return;
-	if (lstat(filename, &s) == 0 && (S_ISLNK(s.st_mode) || s.st_nlink > 1))
-		errx(EXIT_FAILURE,
-		       "output file `%s' is a link\n"
-		       "Use --force if you really want to use it.\n"
-		       "Program not started.", filename);
+	}
+	if (std::filesystem::is_symlink(std::filesystem::path(filename))) {
+		std::cerr << "output file: \"" << filename << "\" is a link" << std::endl;
+		std::cerr << "Use --force if you really want to use it." << std::endl;
+		std::cerr << "Program not started." << std::endl;
+		exit(EXIT_FAILURE);
+	}
 }
 
-int main(int argc, char **argv)
-{
+const std::unordered_map<std::string, char> optNames = {
+	{"--append", 'a'}, {"--command", 'c'}, {"--echo", 'E'}, {"--return", 'e'},
+	{"--flush", 'f'}, {"--log-io", 'B'}, {"--log-in", 'I'}, {"--log-out", 'O'},
+	{"--log-timing", 'T'}, {"--logging-format", 'm'}, {"--output-limit", 'o'},
+	{"--quiet", 'q'}, {"--version", 'V'}, {"--help", 'h'},
+};
+
+std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCount, int argc, char *argv[]) {
+	int i = 1;
+	char c;
+	std::string value;
+	std::unordered_map<char, std::string> valArgs;
+	while (i < argc) {
+		if (argv[i][0] == '-' && std::strlen(argv[i]) == 2) {
+			c = argv[i][1];
+		} else {
+			auto it = optNames.find(argv[i]);
+			if (it == optNames.end()) {
+				std::cerr << "invalid option: " << argv[i] << std::endl;
+				i++;
+				continue;
+			}
+			c = it->second;
+		}
+		switch (c) {
+			case 'a': // append to log
+				ctl.append = true;
+				break;
+			case 'e': // return exit code
+				ctl.rc_wanted = true;
+				break;
+			case 'f': // flush logs
+				ctl.flush = true;
+				break;
+			case 'o': // max output size
+				ctl.maxsz = std::stoul(value);
+				break;
+			case 'q': // quiet mode
+				ctl.quiet = true;
+				break;
+
+			case 'V': // version
+				printf("version 0.0.0\n");
+				exit(EXIT_SUCCESS);
+			case 'h': // usage
+				usage();
+				break;
+			case 'c': // command
+				std::cerr << "command mode not supported" << std::endl;
+				exit(EXIT_FAILURE);
+				break;
+
+			case 'E': // echo
+			case 'B': // both input and output
+			case 'I': // input
+			case 'O': // output
+			case 'm': // log format
+			case 'T': // timing file
+				if (i < argc - 1) {
+					valArgs[c] = std::string(argv[++i]);
+					argCount++;
+				} else {
+					std::cerr << "missing value for option \"" << argv[i] << "\"" << std::endl;
+					exit(EXIT_FAILURE);
+				}
+				break;
+			default:
+				std::cerr << "Try '" << program_invocation_name << "--help' for more information." << std::endl;
+				exit(EXIT_FAILURE);
+		}
+		argCount++;
+		i++;
+	}
+	return valArgs;
+}
+
+int main(int argc, char* argv[]) {
 	ScriptControl ctl;
 	ctl.out = ScriptStream('O');
 	ctl.in = ScriptStream('I');
 
-	struct ul_pty_callbacks *cb;
 	ScriptFormat format = ScriptFormat::Invalid;
 	int ch, caught_signal = 0, rc = 0, echo = 1;
-	const char *outfile = NULL, *infile = NULL;
-	const char *timingfile = NULL, *shell = NULL, *command = NULL;
+	const char *outfile = nullptr, *infile = nullptr, *errfile = nullptr;
+	const char *timingfile = nullptr, *shell = nullptr, *command = nullptr;
 
-	enum { FORCE_OPTION = CHAR_MAX + 1 };
-
-	static const struct option longopts[] = {
-		{"append", no_argument, NULL, 'a'},
-		{"command", required_argument, NULL, 'c'},
-		{"echo", required_argument, NULL, 'E'},
-		{"return", no_argument, NULL, 'e'},
-		{"flush", no_argument, NULL, 'f'},
-		{"force", no_argument, NULL, FORCE_OPTION,},
-		{"log-in", required_argument, NULL, 'I'},
-		{"log-out", required_argument, NULL, 'O'},
-		{"log-io", required_argument, NULL, 'B'},
-		{"log-timing", required_argument, NULL, 'T'},
-		{"logging-format", required_argument, NULL, 'm'},
-		{"output-limit", required_argument, NULL, 'o'},
-		{"quiet", no_argument, NULL, 'q'},
-		{"timing", optional_argument, NULL, 't'},
-		{"version", no_argument, NULL, 'V'},
-		{"help", no_argument, NULL, 'h'},
-		{NULL, 0, NULL, 0}
-	};
 	setlocale(LC_ALL, "");
 	/*
 	 * script -t prints time delays as floating point numbers.  The example
@@ -109,88 +162,58 @@ int main(int argc, char **argv)
 
 	ctl.isterm = isatty(STDIN_FILENO) == 1;
 
-	while ((ch = getopt_long(argc, argv, "aB:c:eE:fI:O:o:qm:T:t::Vh", longopts, NULL)) != -1) {
-		switch (ch) {
-		case 'a':
-			ctl.append = true;
-			break;
-		case 'c':
-			command = optarg;
-			break;
-		case 'E':
-			if (strcmp(optarg, "auto") == 0)
-				; // keep default
-			else if (strcmp(optarg, "never") == 0)
-				echo = 0;
-			else if (strcmp(optarg, "always") == 0)
-				echo = 1;
-			else
-				errx(EXIT_FAILURE, "unssuported echo mode: '%s'", optarg);
-			break;
-		case 'e':
-			ctl.rc_wanted = true;
-			break;
-		case 'f':
-			ctl.flush = true;
-			break;
-		case FORCE_OPTION:
-			ctl.force = true;
-			break;
-		case 'B':
-			ctl.associate(&ctl.in, optarg, ScriptFormat::Raw);
-			ctl.associate(&ctl.out, optarg, ScriptFormat::Raw);
-			infile = outfile = optarg;
-			break;
-		case 'I':
-			ctl.associate(&ctl.in, optarg, ScriptFormat::Raw);
-			infile = optarg;
-			break;
-		case 'O':
-			ctl.associate(&ctl.out, optarg, ScriptFormat::Raw);
-			outfile = optarg;
-			break;
-		case 'o':
-			ctl.maxsz = std::stoul(optarg);
-			break;
-		case 'q':
-			ctl.quiet = true;
-			break;
-		case 'm':
-			if (strcasecmp(optarg, "classic") == 0)
-				format = ScriptFormat::TimingSimple;
-			else if (strcasecmp(optarg, "advanced") == 0)
-				format = ScriptFormat::TimingMulti;
-			else
-				errx(EXIT_FAILURE, "unsupported logging format: '%s'", optarg);
-			break;
-		case 't':
-			if (optarg && *optarg == '=')
-				optarg++;
-			timingfile = optarg ? optarg : "/dev/stderr";
-			break;
-		case 'T' :
-			timingfile = optarg;
-			break;
-		case 'V':
-			printf("version 0.0.0\n");
-			exit(EXIT_SUCCESS);
-		case 'h':
-			usage();
-		default:
-			fprintf(stderr, "Try '%s --help' for more information.\n", program_invocation_short_name);
-			exit(EXIT_FAILURE);
+	int argCount = 1;
+	std::unordered_map<char, std::string> valArgs = parseArgs(ctl, argCount, argc, argv);
+	for (auto [k, v] : valArgs) {
+		switch (k) {
+			case 'E': // echo
+				if (v == "auto") {
+					;
+				} else if (v == "never") {
+					echo = 0;
+				} else if (v == "always") {
+					echo = 1;
+				} else {
+					std::cerr << "unsupported echo mode: " << v << std::endl;
+				}
+				break;
+			case 'B': // both input and output
+				ctl.associate(&ctl.in, v, ScriptFormat::Raw);
+				ctl.associate(&ctl.out, v, ScriptFormat::Raw);
+				infile = outfile = v.c_str();
+				break;
+			case 'I': // input
+				ctl.associate(&ctl.in, v, ScriptFormat::Raw);
+				infile = v.c_str();
+				break;
+			case 'O': // output
+				ctl.associate(&ctl.out, v, ScriptFormat::Raw);
+				outfile = v.c_str();
+				break;
+			case 'm': // log format
+				if (v == "classic") {
+					format = ScriptFormat::TimingSimple;
+				} else if (v == "advanced") {
+					format = ScriptFormat::TimingMulti;
+				} else {
+					std::cerr << "unsupported logging format: \"" << v << "\"" << std::endl;
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'T': // timing file
+				timingfile = v.c_str();
+				break;
 		}
 	}
-	argc -= optind;
-	argv += optind;
+	argc -= argCount;
+	argv += argCount;
 
 	// default if no --log-* specified
 	if (!outfile && !infile) {
 		if (argc > 0) {
 			outfile = argv[0];
-		}
-		else {
-			die_if_link(ctl, DEFAULT_TYPESCRIPT_FILENAME);
+		} else {
+			dieIfLink(ctl, DEFAULT_TYPESCRIPT_FILENAME);
 			outfile = DEFAULT_TYPESCRIPT_FILENAME;
 		}
 
