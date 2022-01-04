@@ -1,9 +1,7 @@
 #ifndef UTIL_LINUX_OPTUTILS_H
 #define UTIL_LINUX_OPTUTILS_H
 
-#include <assert.h>
-
-#include "cctype.h"
+#include <cassert>
 
 static inline const char *option_to_longopt(int c, const struct option *opts) {
 	const struct option *o;
@@ -91,7 +89,7 @@ static inline void err_exclusive_options(
 					const char *n = option_to_longopt(*op, opts);
 					if (n)
 						fprintf(stderr, " --%s", n);
-					else if (c_isgraph(*op))
+					else
 						fprintf(stderr, " -%c", *op);
 				}
 				fputc('\n', stderr);
