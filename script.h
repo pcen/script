@@ -20,9 +20,10 @@ public:
 	std::string filename; // on command line specified name
 	struct timeval oldtime; // previous entry log time (timing script only)
 	struct timeval starttime;
-	unsigned int initialized;
+	bool initialized;
 
-	ScriptLog() : fp{ nullptr }, initialized{ 0 } {}
+	ScriptLog();
+	int flush();
 };
 
 class ScriptStream {
@@ -64,15 +65,22 @@ public:
 	void initTerminalInfo();
 	ScriptLog* associate(ScriptStream* stream, const std::string& filename, ScriptFormat format);
 	int loggingStart();
+
+	ssize_t logSignal(int signum, const char *msgfmt, ...);
 	ssize_t logInfo(const char* name, const char* msgfmt, ...);
+
 	void loggingDone(const char* msg);
+	int closeLog(ScriptLog* log, const char* msg, int status);
+
+	void deleteLog(ScriptLog* log);
+	int startLog(ScriptLog* log);
 
 	// pty callback methods
-	void childDie(pid_t, int) override;
-	void childSigstop(pid_t) override;
-	int logStreamActivity(int, char*, size_t) override;
-	int logSignal(struct signalfd_siginfo*, void*) override;
-	int flushLogs() override;
+	void ptyChildDie(pid_t, int) override;
+	void ptyChildSigstop(pid_t) override;
+	int ptyLogStreamActivity(int, char*, size_t) override;
+	int ptyLogSignal(struct signalfd_siginfo*, void*) override;
+	int ptyFlushLogs() override;
 };
 
 #endif // SCRIPT_H

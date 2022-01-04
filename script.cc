@@ -52,6 +52,17 @@
 
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
+ScriptLog::ScriptLog() : fp{ nullptr }, initialized{ false } {}
+
+int ScriptLog::flush() {
+	if (!initialized) {
+		return 0;
+	}
+	DBG("flushing " << filename);
+
+	return fflush(fp); // 0 on success
+}
+
 ScriptControl::ScriptControl()
 	: outsz{ 0 },
 	maxsz{ 0 },
@@ -118,7 +129,7 @@ ScriptLog* ScriptControl::associate(ScriptStream* stream, const std::string& fil
 	return log;
 }
 
-int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
+int ScriptControl::closeLog(ScriptLog *log, const char *msg, int status) {
 	int rc = 0;
 
 	if (!log || !log->initialized)
@@ -146,8 +157,8 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 		gettime_monotonic(&now);
 		timersub(&now, &log->starttime, &delta);
 
-		ctl->logInfo("DURATION", "%ld.%06ld", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec);
-		ctl->logInfo("EXIT_CODE", "%d", status);
+		logInfo("DURATION", "%ld.%06ld", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec);
+		logInfo("EXIT_CODE", "%d", status);
 		break;
 	}
 	case ScriptFormat::TimingSimple:
@@ -159,62 +170,48 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 		rc = -errno;
 	}
 
-	memset(log, 0, sizeof(*log));
-
 	return rc;
 }
 
-static int log_flush(ScriptControl *ctl __attribute__((__unused__)), ScriptLog *log) {
-	if (!log || !log->initialized)
-		return 0;
-
-	DBG("flushing " << log->filename);
-
-	fflush(log->fp);
-	return 0;
-}
-
-static void log_free(ScriptControl *ctl, ScriptLog *log) {
-	size_t i;
-
+void ScriptControl::deleteLog(ScriptLog *log) {
 	if (!log)
 		return;
 
-	if (ctl->siglog == log)
-		ctl->siglog = nullptr;
-	else if (ctl->infolog == log)
-		ctl->infolog = nullptr;
-
-	for (i = 0; i < ctl->out.logs.size(); i++) {
-		if (ctl->out.logs[i] == log)
-			ctl->out.logs[i] = nullptr;
+	if (siglog == log) {
+		siglog = nullptr;
+	} else if (infolog == log) {
+		infolog = nullptr;
 	}
-	for (i = 0; i < ctl->in.logs.size(); i++) {
-		if (ctl->in.logs[i] == log)
-			ctl->in.logs[i] = nullptr;
+
+	for (size_t i = 0; i < out.logs.size(); i++) {
+		if (out.logs[i] == log) {
+			out.logs[i] = nullptr;
+		}
+	}
+	for (size_t i = 0; i < in.logs.size(); i++) {
+		if (in.logs[i] == log) {
+			in.logs[i] = nullptr;
+		}
 	}
 	delete log;
 }
 
-static int log_start(ScriptControl *ctl, ScriptLog *log) {
+int ScriptControl::startLog(ScriptLog *log) {
 	if (log->initialized)
 		return 0;
 
 	DBG("opening " << log->filename);
 
-	assert(log->fp == NULL);
+	assert(log->fp == nullptr);
 
-	/* open the log */
-	log->fp = fopen(log->filename.c_str(),
-			ctl->append && log->format == ScriptFormat::Raw ?
-			"a" UL_CLOEXECSTR :
-			"w" UL_CLOEXECSTR);
+	// open the log
+	log->fp = fopen(log->filename.c_str(), append && log->format == ScriptFormat::Raw ? "a" UL_CLOEXECSTR : "w" UL_CLOEXECSTR);
 	if (!log->fp) {
 		warn("cannot open %s", log->filename.c_str());
 		return -errno;
 	}
 
-	/* write header, etc. */
+	// write header, etc.
 	switch (log->format) {
 	case ScriptFormat::Raw:
 	{
@@ -224,17 +221,19 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 
 		fprintf(log->fp, "Script started on %s [", buf);
 
-		if (ctl->isterm) {
-			ctl->initTerminalInfo();
+		if (isterm) {
+			initTerminalInfo();
 
-			if (ctl->ttytype)
-				fprintf(log->fp, "TERM=\"%s\" ", ctl->ttytype);
-			if (ctl->ttyname)
-				fprintf(log->fp, "TTY=\"%s\" ", ctl->ttyname);
-
-			fprintf(log->fp, "COLUMNS=\"%d\" LINES=\"%d\"", ctl->ttycols, ctl->ttylines);
-		} else
+			if (ttytype) {
+				fprintf(log->fp, "TERM=\"%s\" ", ttytype);
+			}
+			if (ttyname) {
+				fprintf(log->fp, "TTY=\"%s\" ", ttyname);
+			}
+			fprintf(log->fp, "COLUMNS=\"%d\" LINES=\"%d\"", ttycols, ttylines);
+		} else {
 			fprintf(log->fp, "<not executed on terminal>");
+		}
 
 		fputs("]\n", log->fp);
 		break;
@@ -246,14 +245,14 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 		break;
 	}
 
-	log->initialized = 1;
+	log->initialized = true;
 	return 0;
 }
 
 int ScriptControl::loggingStart() {
 	// start output logs
 	for (auto log : out.logs) {
-		int rc = log_start(this, log);
+		int rc = startLog(log);
 		if (rc) {
 			return rc;
 		}
@@ -261,7 +260,7 @@ int ScriptControl::loggingStart() {
 
 	// start input logs
 	for (auto log : in.logs) {
-		int rc = log_start(this, log);
+		int rc = startLog(log);
 		if (rc) {
 			return rc;
 		}
@@ -338,18 +337,17 @@ ssize_t log_stream_activity(ScriptControl* ctl, ScriptStream* stream, char* buf,
 	return outsz;
 }
 
-ssize_t log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
-	ScriptLog *log;
+// logSignal writes a message to the siglog
+ssize_t ScriptControl::logSignal(int signum, const char *msgfmt, ...) {
 	struct timeval now, delta;
 	char msg[BUFSIZ] = {0};
 	va_list ap;
 	ssize_t sz;
 
-	assert(ctl);
-
-	log = ctl->siglog;
-	if (!log)
+	ScriptLog* log = siglog;
+	if (!log) {
 		return 0;
+	}
 
 	assert(log->format == ScriptFormat::TimingMulti);
 	DBG("  writing signal to multi-stream timing");
@@ -362,8 +360,9 @@ ssize_t log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
 		va_start(ap, msgfmt);
 		rc = vsnprintf(msg, sizeof(msg), msgfmt, ap);
 		va_end(ap);
-		if (rc < 0)
-			*msg = '\0';;
+		if (rc < 0) {
+			*msg = '\0';
+		}
 	}
 
 	if (*msg)
@@ -379,6 +378,7 @@ ssize_t log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
 	return sz;
 }
 
+// logInfo writes a message to the infolog
 ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 	char msg[BUFSIZ] = {0};
 	va_list ap;
@@ -414,7 +414,6 @@ ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 
 void ScriptControl::loggingDone(const char *msg) {
 	int status;
-	size_t i;
 
 	DBG("stop logging");
 
@@ -428,58 +427,54 @@ void ScriptControl::loggingDone(const char *msg) {
 
 	// close all output logs
 	for (auto log : out.logs) {
-		log_close(this, log, msg, status);
-		log_free(this, log);
-	}
-	for (auto log : out.logs) {
-		delete log;
+		closeLog(log, msg, status);
+		deleteLog(log);
 	}
 	out.logs.clear();
 
 	// close all input logs
 	for (auto log : in.logs) {
-		log_close(this, log, msg, status);
-		log_free(this, log);
-	}
-	for (auto log : in.logs) {
-		delete log;
+		closeLog(log, msg, status);
+		deleteLog(log);
 	}
 	in.logs.clear();
 }
 
-void ScriptControl::childDie(pid_t child, int status) {
+// pty callback methods
+void ScriptControl::ptyChildDie(pid_t child, int status) {
 	child = static_cast<pid_t>(-1);
 	childstatus = status;
 }
 
-void ScriptControl::childSigstop(pid_t child) {
+void ScriptControl::ptyChildSigstop(pid_t child) {
 	DBG(" child stop by SIGSTOP -- stop parent too");
 	kill(getpid(), SIGSTOP);
 	DBG(" resume");
 	kill(child, SIGCONT);
 }
 
-int ScriptControl::logStreamActivity(int fd, char* buf, size_t bufsz) {
+int ScriptControl::ptyLogStreamActivity(int fd, char* buf, size_t bufsz) {
 	ssize_t ssz = 0;
 
 	DBG("stream activity callback");
 
-	/* from stdin (user) to command */
-	if (fd == STDIN_FILENO)
+	if (fd == STDIN_FILENO) {
+		// from stdin (user) to command
 		ssz = log_stream_activity(this, &in, buf, (size_t) bufsz);
-
-	/* from command (master) to stdout and log */
-	else if (fd == ul_pty_get_childfd(pty))
+	} else if (fd == ul_pty_get_childfd(pty)) {
+		// from command (master) to stdout and log
 		ssz = log_stream_activity(this, &out, buf, (size_t) bufsz);
+	}
 
-	if (ssz < 0)
+	if (ssz < 0) {
 		return (int) ssz;
+	}
 
 	DBG(" append " << ssz << " bytes [summary=" << outsz << ", max=" << maxsz << "]");
 
 	outsz += ssz;
 
-	/* check output limit */
+	// check output limit
 	if (maxsz != 0 && outsz >= maxsz) {
 		if (!quiet)
 			printf("Script terminated, max output files size %lu exceeded.\n", maxsz);
@@ -490,42 +485,44 @@ int ScriptControl::logStreamActivity(int fd, char* buf, size_t bufsz) {
 	return 0;
 }
 
-int ScriptControl::logSignal(struct signalfd_siginfo* info, void* sigdata) {
+int ScriptControl::ptyLogSignal(struct signalfd_siginfo* info, void* sigdata) {
 	ssize_t ssz = 0;
 
 	switch (info->ssi_signo) {
 	case SIGWINCH:
 	{
-		struct winsize *win = (struct winsize *) sigdata;
-		ssz = log_signal(this, info->ssi_signo, "ROWS=%d COLS=%d", win->ws_row, win->ws_col);
+		struct winsize* win = static_cast<winsize*>(sigdata);
+		ssz = logSignal(info->ssi_signo, "ROWS=%d COLS=%d", win->ws_row, win->ws_col);
 		break;
 	}
 	case SIGTERM:
-		/* fallthrough */
+		// FALLTHROUGH
 	case SIGINT:
-		/* fallthrough */
+		// FALLTHROUGH
 	case SIGQUIT:
-		ssz = log_signal(this, info->ssi_signo, NULL);
+		ssz = logSignal(info->ssi_signo, NULL);
 		break;
 	default:
-		/* no log */
+		// no log
 		break;
 	}
 
 	return ssz < 0 ? ssz : 0;
 }
 
-int ScriptControl::flushLogs() {
+int ScriptControl::ptyFlushLogs() {
 	for (auto log : out.logs) {
-		int rc = log_flush(this, log);
-		if (rc)
+		int rc = log ? log->flush() : 0;
+		if (rc) {
 			return rc;
+		}
 	}
 
 	for (auto log : in.logs) {
-		int rc = log_flush(this, log);
-		if (rc)
+		int rc = log ? log->flush() : 0;
+		if (rc) {
 			return rc;
+		}
 	}
 	return 0;
 }

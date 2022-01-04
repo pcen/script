@@ -23,25 +23,25 @@ public:
 	 * DUMPED; The callback has to call ul_pty_set_child(pty, (pid_t) -1)
 	 * if child is no longer alive.
 	 */
-	virtual bool useChildWait() { return false; }
-	virtual void childWait(pid_t) {}
+	virtual bool ptyUseChildWait() { return false; }
+	virtual void ptyChildWait(pid_t) {}
 
 	/*
 	 * Used when useChildWait() is false to inform about child status
 	 */
-	virtual void childDie(pid_t, int) = 0;
+	virtual void ptyChildDie(pid_t, int) = 0;
 
 	/*
 	 * Executed on SIGCHLD when ssi_status is SIGSTOP
 	 */
-	virtual void childSigstop(pid_t) = 0;
+	virtual void ptyChildSigstop(pid_t) = 0;
 
 	/*
 	 * Executed in master loop before Pty enter poll() and in time set by
 	 * ul_pty_set_mainloop_time(). The callback is no used when time is not set.
 	 */
-	virtual bool useMainLoop() { return false; }
-	virtual int mainLoop() {};
+	virtual bool ptyUseMainLoop() { return false; }
+	virtual int ptyMainLoop() {};
 
 	/*
 	 * Executed on master or stdin activity, arguments:
@@ -49,19 +49,19 @@ public:
 	 *   3rd - buffer with data
 	 *   4th - size of the data
 	 */
-	virtual int logStreamActivity(int, char*, size_t) = 0;
+	virtual int ptyLogStreamActivity(int, char*, size_t) = 0;
 
 	/*
 	 * Executed on signal, arguments:
 	 *   2nd - signal info
 	 *   3rd - NULL or signal specific data (e.g. struct winsize on SIGWINCH)
 	 */
-	virtual int logSignal(struct signalfd_siginfo*, void*) = 0;
+	virtual int ptyLogSignal(struct signalfd_siginfo*, void*) = 0;
 
 	/*
 	 * Executed on SIGUSR1
 	 */
-	virtual int flushLogs() = 0;
+	virtual int ptyFlushLogs() = 0;
 };
 
 struct Pty {
