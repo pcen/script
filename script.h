@@ -33,6 +33,7 @@ public:
 	char ident; // stream identifier
 	ScriptStream(char ident = '\0');
 	ScriptLog* getLogByName(const std::string& name);
+	bool operator==(const ScriptStream& rhs) const;
 };
 
 class ScriptControl : public PtyCallback {
@@ -65,7 +66,7 @@ public:
 
 	ScriptControl();
 	void initTerminalInfo();
-	ScriptLog* associate(ScriptStream* stream, const std::string& filename, ScriptFormat format);
+	ScriptLog* associate(ScriptStream& stream, const std::string& filename, ScriptFormat format);
 	int loggingStart();
 
 	ssize_t logWrite(ScriptStream& stream, ScriptLog* log, char* obuf, size_t bytes);

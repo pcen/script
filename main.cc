@@ -163,8 +163,8 @@ int main(int argc, char* argv[]) {
 	ctl.isterm = isatty(STDIN_FILENO) == 1;
 
 	int argCount = 1;
-	std::unordered_map<char, std::string> valArgs = parseArgs(ctl, argCount, argc, argv);
-	for (auto [k, v] : valArgs) {
+	std::unordered_map<char, std::string> argVals = parseArgs(ctl, argCount, argc, argv);
+	for (auto [k, v] : argVals) {
 		switch (k) {
 			case 'E': // echo
 				if (v == "auto") {
@@ -178,16 +178,16 @@ int main(int argc, char* argv[]) {
 				}
 				break;
 			case 'B': // both input and output
-				ctl.associate(&ctl.in, v, ScriptFormat::Raw);
-				ctl.associate(&ctl.out, v, ScriptFormat::Raw);
+				ctl.associate(ctl.in, v, ScriptFormat::Raw);
+				ctl.associate(ctl.out, v, ScriptFormat::Raw);
 				infile = outfile = v.c_str();
 				break;
 			case 'I': // input
-				ctl.associate(&ctl.in, v, ScriptFormat::Raw);
+				ctl.associate(ctl.in, v, ScriptFormat::Raw);
 				infile = v.c_str();
 				break;
 			case 'O': // output
-				ctl.associate(&ctl.out, v, ScriptFormat::Raw);
+				ctl.associate(ctl.out, v, ScriptFormat::Raw);
 				outfile = v.c_str();
 				break;
 			case 'm': // log format
@@ -218,7 +218,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		// associate stdout with typescript file
-		ctl.associate(&ctl.out, outfile, ScriptFormat::Raw);
+		ctl.associate(ctl.out, outfile, ScriptFormat::Raw);
 	}
 
 	if (timingfile) {
@@ -233,10 +233,10 @@ int main(int argc, char* argv[]) {
 			errx(EXIT_FAILURE, "log multiple streams is mutually exclusive with 'classic' format");
 		}
 		if (outfile) {
-			ctl.associate(&ctl.out, timingfile, format);
+			ctl.associate(ctl.out, timingfile, format);
 		}
 		if (infile) {
-			ctl.associate(&ctl.in, timingfile, format);
+			ctl.associate(ctl.in, timingfile, format);
 		}
 	}
 

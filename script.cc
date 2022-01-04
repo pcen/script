@@ -107,22 +107,24 @@ ScriptLog* ScriptStream::getLogByName(const std::string& name) {
 	return nullptr;
 }
 
-ScriptLog* ScriptControl::associate(ScriptStream* stream, const std::string& filename, ScriptFormat format) {
+bool ScriptStream::operator==(const ScriptStream& rhs) const {
+	return this == &rhs;
+}
+
+ScriptLog* ScriptControl::associate(ScriptStream& stream, const std::string& filename, ScriptFormat format) {
 	DBG("associate" << filename << " with stream");
 
-	assert(stream);
-
-	ScriptLog* log = stream->getLogByName(filename);
+	ScriptLog* log = stream.getLogByName(filename);
 	if (log) return log;
 
-	log = stream == &out ? in.getLogByName(filename) : out.getLogByName(filename);
+	log = stream == out ? in.getLogByName(filename) : out.getLogByName(filename);
 	if (!log) {
 		log = new ScriptLog();
 		log->filename = filename;
 		log->format = format;
 	}
 
-	stream->logs.push_back(log);
+	stream.logs.push_back(log);
 
 	// remember where to write info about signals
 	if (format == ScriptFormat::TimingMulti) {
