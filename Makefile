@@ -4,7 +4,7 @@ CXX = g++
 CXXFLAGS = -std=c++17 -include config.h -g -D$(DEBUG)
 LDFLAGS = -lutil
 
-OBJ = main.o script.o ttyutils.o monotonic.o signames.o pty-session.o
+OBJ = main.o script.o ttyutils.o signames.o pty-session.o
 
 script: $(OBJ)
 	$(CXX) $(OBJ) -o script $(LDFLAGS) $(CXXFLAGS)

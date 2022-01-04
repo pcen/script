@@ -26,7 +26,6 @@
 #include "all-io.h"
 #include "ttyutils.h"
 #include "pty-session.h"
-#include "monotonic.h"
 #include "debug.h"
 
 struct ul_pty *ul_new_pty(int is_stdin_tty) {

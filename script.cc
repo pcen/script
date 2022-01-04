@@ -67,7 +67,6 @@
 #include "closestream.h"
 #include "ttyutils.h"
 #include "all-io.h"
-#include "monotonic.h"
 #include "optutils.h"
 #include "signames.h"
 #include "pty-session.h"
@@ -212,19 +211,19 @@ static void log_free(ScriptControl *ctl, ScriptLog *log) {
 	 * (TODO: maybe use include/list.h to make it more elegant)
 	 */
 	if (ctl->siglog == log)
-		ctl->siglog = NULL;
+		ctl->siglog = nullptr;
 	else if (ctl->infolog == log)
-		ctl->infolog = NULL;
+		ctl->infolog = nullptr;
 
 	for (i = 0; i < ctl->out.nlogs; i++) {
 		if (ctl->out.logs[i] == log)
-			ctl->out.logs[i] = NULL;
+			ctl->out.logs[i] = nullptr;
 	}
 	for (i = 0; i < ctl->in.nlogs; i++) {
 		if (ctl->in.logs[i] == log)
-			ctl->in.logs[i] = NULL;
+			ctl->in.logs[i] = nullptr;
 	}
-	free(log);
+	delete log;
 }
 
 static int log_start(ScriptControl *ctl, ScriptLog *log) {
@@ -503,7 +502,7 @@ void callback_child_sigstop(void* data, pid_t child) {
 }
 
 int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz) {
-	ScriptControl *ctl = (ScriptControl *) data;
+	ScriptControl *ctl = (ScriptControl*) data;
 	ssize_t ssz = 0;
 
 	DBG("stream activity callback");

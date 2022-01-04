@@ -355,10 +355,6 @@ done:
 	if (!ctl.quiet)
 		printf("Script done.\n");
 
-#ifdef HAVE_LIBUTEMPTER
-	if (ul_pty_get_childfd(ctl.pty) >= 0)
-		utempter_remove_record(ul_pty_get_childfd(ctl.pty));
-#endif
 	ul_free_pty(ctl.pty);
 
 	/* default exit code */

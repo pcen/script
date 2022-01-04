@@ -4,6 +4,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <chrono>
+
 #define ARRAY_SIZE(arr) ((sizeof(arr) / sizeof(*(arr))) / static_cast<size_t>(!(sizeof(arr) % sizeof(*(arr)))))
 
 #ifdef O_CLOEXEC
@@ -57,6 +59,15 @@ inline const char* endswith(const char *s, const char *postfix) {
 	if (memcmp(s + sl - pl, postfix, pl) != 0)
 		return nullptr;
 	return s + sl - pl;
+}
+
+inline void gettime_monotonic(struct timeval *tv) {
+	auto tp = std::chrono::steady_clock::now();
+	auto s = std::chrono::time_point_cast<std::chrono::seconds>(tp);
+	if (s > tp) s -= std::chrono::seconds(1);
+	auto us = std::chrono::duration_cast<std::chrono::microseconds>(tp - s);
+	tv->tv_sec = s.time_since_epoch().count();
+	tv->tv_usec = us.count();
 }
 
 #endif // UTILS_H
