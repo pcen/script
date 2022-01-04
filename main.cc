@@ -223,19 +223,11 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	ctl.pty = ul_new_pty(ctl.isterm);
+	ctl.pty = new ul_pty(ctl.isterm, ctl);
 	if (!ctl.pty)
 		err(EXIT_FAILURE, "failed to allocate PTY handler");
 
 	ul_pty_slave_echo(ctl.pty, echo);
-
-	ul_pty_set_callback_data(ctl.pty, (void *) &ctl);
-	cb = ul_pty_get_callbacks(ctl.pty);
-	cb->child_die = callback_child_die;
-	cb->child_sigstop = callback_child_sigstop;
-	cb->log_stream_activity = callback_log_stream_activity;
-	cb->log_signal = callback_log_signal;
-	cb->flush_logs = callback_flush_logs;
 
 	if (!ctl.quiet) {
 		printf("Script started");
@@ -346,7 +338,7 @@ done:
 	if (!ctl.quiet)
 		printf("Script done.\n");
 
-	ul_free_pty(ctl.pty);
+	delete ctl.pty;
 
 	/* default exit code */
 	rc = rc ? EXIT_FAILURE : EXIT_SUCCESS;

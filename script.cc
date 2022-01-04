@@ -48,7 +48,6 @@
 #include "ttyutils.h"
 #include "all-io.h"
 #include "signames.h"
-#include "pty-session.h"
 #include "debug.h"
 
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
@@ -447,61 +446,57 @@ void logging_done(ScriptControl *ctl, const char *msg) {
 	ctl->in.logs.clear();
 }
 
-void callback_child_die(void* data, pid_t child, int status) {
-	ScriptControl *ctl = (ScriptControl *) data;
-
-	ctl->child = (pid_t) -1;
-	ctl->childstatus = status;
+void ScriptControl::childDie(pid_t child, int status) {
+	child = static_cast<pid_t>(-1);
+	childstatus = status;
 }
 
-void callback_child_sigstop(void* data, pid_t child) {
+void ScriptControl::childSigstop(pid_t child) {
 	DBG(" child stop by SIGSTOP -- stop parent too");
 	kill(getpid(), SIGSTOP);
 	DBG(" resume");
 	kill(child, SIGCONT);
 }
 
-int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz) {
-	ScriptControl *ctl = (ScriptControl*) data;
+int ScriptControl::logStreamActivity(int fd, char* buf, size_t bufsz) {
 	ssize_t ssz = 0;
 
 	DBG("stream activity callback");
 
 	/* from stdin (user) to command */
 	if (fd == STDIN_FILENO)
-		ssz = log_stream_activity(ctl, &ctl->in, buf, (size_t) bufsz);
+		ssz = log_stream_activity(this, &in, buf, (size_t) bufsz);
 
 	/* from command (master) to stdout and log */
-	else if (fd == ul_pty_get_childfd(ctl->pty))
-		ssz = log_stream_activity(ctl, &ctl->out, buf, (size_t) bufsz);
+	else if (fd == ul_pty_get_childfd(pty))
+		ssz = log_stream_activity(this, &out, buf, (size_t) bufsz);
 
 	if (ssz < 0)
 		return (int) ssz;
 
-	DBG(" append " << ssz << " bytes [summary=" << ctl->outsz << ", max=" << ctl->maxsz << "]");
+	DBG(" append " << ssz << " bytes [summary=" << outsz << ", max=" << maxsz << "]");
 
-	ctl->outsz += ssz;
+	outsz += ssz;
 
 	/* check output limit */
-	if (ctl->maxsz != 0 && ctl->outsz >= ctl->maxsz) {
-		if (!ctl->quiet)
-			printf("Script terminated, max output files size %lu exceeded.\n", ctl->maxsz);
-		DBG("output size " << ctl->outsz << ", exceeded limit " << ctl->maxsz);
-		logging_done(ctl, "max output size exceeded");
+	if (maxsz != 0 && outsz >= maxsz) {
+		if (!quiet)
+			printf("Script terminated, max output files size %lu exceeded.\n", maxsz);
+		DBG("output size " << outsz << ", exceeded limit " << maxsz);
+		logging_done(this, "max output size exceeded");
 		return 1;
 	}
 	return 0;
 }
 
-int callback_log_signal(void* data, struct signalfd_siginfo* info, void* sigdata) {
-	ScriptControl *ctl = (ScriptControl *) data;
+int ScriptControl::logSignal(struct signalfd_siginfo* info, void* sigdata) {
 	ssize_t ssz = 0;
 
 	switch (info->ssi_signo) {
 	case SIGWINCH:
 	{
 		struct winsize *win = (struct winsize *) sigdata;
-		ssz = log_signal(ctl, info->ssi_signo, "ROWS=%d COLS=%d", win->ws_row, win->ws_col);
+		ssz = log_signal(this, info->ssi_signo, "ROWS=%d COLS=%d", win->ws_row, win->ws_col);
 		break;
 	}
 	case SIGTERM:
@@ -509,7 +504,7 @@ int callback_log_signal(void* data, struct signalfd_siginfo* info, void* sigdata
 	case SIGINT:
 		/* fallthrough */
 	case SIGQUIT:
-		ssz = log_signal(ctl, info->ssi_signo, NULL);
+		ssz = log_signal(this, info->ssi_signo, NULL);
 		break;
 	default:
 		/* no log */
@@ -519,18 +514,15 @@ int callback_log_signal(void* data, struct signalfd_siginfo* info, void* sigdata
 	return ssz < 0 ? ssz : 0;
 }
 
-int callback_flush_logs(void* data) {
-	ScriptControl* ctl = (ScriptControl *) data;
-	size_t i;
-
-	for (auto log : ctl->out.logs) {
-		int rc = log_flush(ctl, log);
+int ScriptControl::flushLogs() {
+	for (auto log : out.logs) {
+		int rc = log_flush(this, log);
 		if (rc)
 			return rc;
 	}
 
-	for (auto log : ctl->in.logs) {
-		int rc = log_flush(ctl, log);
+	for (auto log : in.logs) {
+		int rc = log_flush(this, log);
 		if (rc)
 			return rc;
 	}

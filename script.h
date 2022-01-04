@@ -4,6 +4,8 @@
 #include <vector>
 #include <string>
 
+#include "pty-session.h"
+
 enum class ScriptFormat {
 	Invalid = 0,
 	Raw, // raw slave/master data
@@ -31,7 +33,7 @@ public:
 	ScriptLog* getLogByName(const std::string& name);
 };
 
-class ScriptControl {
+class ScriptControl : public PtyCallback {
 public:
 	uint64_t outsz; // current output files size
 	uint64_t maxsz; // maximum output files size
@@ -61,13 +63,14 @@ public:
 	ScriptControl();
 	void initTerminalInfo();
 	ScriptLog* associate(ScriptStream* stream, const std::string& filename, ScriptFormat format);
+
+	void childDie(pid_t, int) override;
+	void childSigstop(pid_t) override;
+	int logStreamActivity(int, char*, size_t) override;
+	int logSignal(struct signalfd_siginfo*, void*) override;
+	int flushLogs() override;
 };
 
-void callback_child_die(void* data, pid_t child, int status);
-void callback_child_sigstop(void* data, pid_t child);
-int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz);
-int callback_log_signal(void* data, struct signalfd_siginfo* info, void* sigdata);
-int callback_flush_logs(void* data);
 int logging_start(ScriptControl *ctl);
 ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...);
 void logging_done(ScriptControl *ctl, const char *msg);

@@ -28,26 +28,15 @@
 #include "pty-session.h"
 #include "debug.h"
 
-struct ul_pty *ul_new_pty(int is_stdin_tty) {
-	ul_pty *pty = static_cast<ul_pty*>(calloc(1, sizeof(*pty)));
+ul_pty::ul_pty(bool is_stdin_tty, PtyCallback& callback)
+	: callback{ callback },
+	isterm{ is_stdin_tty },
+	master{ -1 },
+	slave{ -1 },
+	sigfd{ -1 },
+	child{ static_cast<pid_t>(-1) } {}
 
-	if (!pty)
-		return nullptr;
-
-	DBG(pty << ": alloc handler");
-	pty->isterm = is_stdin_tty;
-	pty->master = -1;
-	pty->slave = -1;
-	pty->sigfd = -1;
-	pty->child = (pid_t) -1;
-
-	return pty;
-}
-
-void ul_free_pty(struct ul_pty *pty)
-{
-	free(pty);
-}
+ul_pty::~ul_pty() {}
 
 void ul_pty_slave_echo(struct ul_pty *pty, int enable)
 {
@@ -59,18 +48,6 @@ int ul_pty_get_delivered_signal(struct ul_pty *pty)
 {
 	assert(pty);
 	return pty->delivered_signal;
-}
-
-struct ul_pty_callbacks *ul_pty_get_callbacks(struct ul_pty *pty)
-{
-	assert(pty);
-	return &pty->callbacks;
-}
-
-void ul_pty_set_callback_data(struct ul_pty *pty, void *data)
-{
-	assert(pty);
-	pty->callback_data = data;
 }
 
 void ul_pty_set_child(struct ul_pty *pty, pid_t child)
@@ -188,7 +165,7 @@ int ul_pty_setup(struct ul_pty *pty)
 	sigaddset(&ourset, SIGINT);
 	sigaddset(&ourset, SIGQUIT);
 
-	if (pty->callbacks.flush_logs)
+	if (pty->callback.flushLogs())
 		sigaddset(&ourset, SIGUSR1);
 
 	if ((pty->sigfd = signalfd(-1, &ourset, SFD_CLOEXEC)) < 0)
@@ -307,25 +284,21 @@ void ul_pty_write_eof_to_child(struct ul_pty *pty)
 	write_to_child(pty, &c, sizeof(char));
 }
 
-static int mainloop_callback(struct ul_pty *pty)
-{
-	int rc;
-
-	if (!pty->callbacks.mainloop)
+static int mainloop_callback(ul_pty *pty) {
+	if (!pty->callback.useMainLoop()) {
 		return 0;
+	}
 
 	DBG(pty << ": calling mainloop callback");
-	rc = pty->callbacks.mainloop(pty->callback_data);
+	int rc = pty->callback.mainLoop();
 
 	DBG(pty << ": callback done [rc=" << rc << "]");
 	return rc;
 }
 
-static int handle_io(struct ul_pty *pty, int fd, int *eof)
-{
+static int handle_io(ul_pty *pty, int fd, int *eof) {
 	char buf[BUFSIZ];
 	ssize_t bytes;
-	int rc = 0;
 	sigset_t set;
 
 	DBG(pty << ": handle I/O on fd=" << fd);
@@ -365,15 +338,10 @@ static int handle_io(struct ul_pty *pty, int fd, int *eof)
 		write_output(buf, bytes);
 	}
 
-	if (pty->callbacks.log_stream_activity)
-		rc = pty->callbacks.log_stream_activity(
-					pty->callback_data, fd, buf, bytes);
-
-	return rc;
+	return pty->callback.logStreamActivity(fd, buf, bytes);
 }
 
-void ul_pty_wait_for_child(struct ul_pty *pty)
-{
+void ul_pty_wait_for_child(ul_pty *pty) {
 	int status;
 	pid_t pid;
 	int options = 0;
@@ -390,31 +358,25 @@ void ul_pty_wait_for_child(struct ul_pty *pty)
 			pid = waitpid(pty->child, &status, options);
 			DBG(" waitpid done [rc=" << pid << "]");
 			if (pid != (pid_t) - 1) {
-				if (pty->callbacks.child_die)
-					pty->callbacks.child_die(
-							pty->callback_data,
-							pty->child, status);
+				pty->callback.childDie(pty->child, status);
 				ul_pty_set_child(pty, (pid_t) -1);
-			} else
+			} else {
 				break;
+			}
 		}
 	} else {
 		/* final wait */
 		while ((pid = waitpid(-1, &status, options)) > 0) {
 			DBG("waitpid done [rc=" << pid << "]");
 			if (pid == pty->child) {
-				if (pty->callbacks.child_die)
-					pty->callbacks.child_die(
-							pty->callback_data,
-							pty->child, status);
+				pty->callback.childDie(pty->child, status);
 				ul_pty_set_child(pty, (pid_t) -1);
 			}
 		}
 	}
 }
 
-static int handle_signal(struct ul_pty *pty, int fd)
-{
+static int handle_signal(ul_pty *pty, int fd) {
 	struct signalfd_siginfo info;
 	ssize_t bytes;
 	int rc = 0;
@@ -433,13 +395,13 @@ static int handle_signal(struct ul_pty *pty, int fd)
 		DBG(pty << ": get signal SIGCHLD");
 
 		if (info.ssi_code == CLD_EXITED || info.ssi_code == CLD_KILLED || info.ssi_code == CLD_DUMPED) {
-			if (pty->callbacks.child_wait)
-				pty->callbacks.child_wait(pty->callback_data, pty->child);
-			else
+			if (pty->callback.useChildWait()) {
+				pty->callback.childWait(pty->child);
+			} else {
 				ul_pty_wait_for_child(pty);
-
+			}
 		} else if (info.ssi_status == SIGSTOP && pty->child > 0) {
-			pty->callbacks.child_sigstop(pty->callback_data, pty->child);
+			pty->callback.childSigstop(pty->child);
 		}
 
 		if (pty->child <= 0) {
@@ -453,10 +415,7 @@ static int handle_signal(struct ul_pty *pty, int fd)
 		if (pty->isterm) {
 			ioctl(STDIN_FILENO, TIOCGWINSZ, (char *)&pty->win);
 			ioctl(pty->slave, TIOCSWINSZ, (char *)&pty->win);
-
-			if (pty->callbacks.log_signal)
-				rc = pty->callbacks.log_signal(pty->callback_data,
-							&info, (void *) &pty->win);
+			rc = pty->callback.logSignal(&info, static_cast<void*>(&pty->win));
 		}
 		break;
 	case SIGTERM:
@@ -469,14 +428,11 @@ static int handle_signal(struct ul_pty *pty, int fd)
 		/* Child termination is going to generate SIGCHLD (see above) */
 		if (pty->child > 0)
 			kill(pty->child, SIGTERM);
-
-		if (pty->callbacks.log_signal)
-			rc = pty->callbacks.log_signal(pty->callback_data, &info, (void *) &pty->win);
+			rc = pty->callback.logSignal(&info, static_cast<void*>(&pty->win));
 		break;
 	case SIGUSR1:
 		DBG(pty << ": get signal SIGUSR1");
-		if (pty->callbacks.flush_logs)
-			rc = pty->callbacks.flush_logs(pty->callback_data);
+		rc = pty->callback.flushLogs();
 		break;
 	default:
 		abort();
@@ -649,8 +605,6 @@ int main(int argc, char *argv[])
 		shell = _PATH_BSHELL;
 	if (argc == 2)
 		command = argv[1];
-
-	ul_pty_init_debug(0);
 
 	pty = ul_new_pty(isatty(STDIN_FILENO));
 	if (!pty)
