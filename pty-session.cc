@@ -1,15 +1,3 @@
-/*
- * This is pseudo-terminal container for child process where parent creates a
- * proxy between the current std{in,out,etrr} and the child's pty. Advantages:
- *
- * - child has no access to parent's terminal (e.g. su --pty)
- * - parent can log all traffic between user and child's terminal (e.g. script(1))
- * - it's possible to start commands on terminal although parent has no terminal
- *
- * This code is in the public domain; do with it what you wish.
- *
- * Written by Karel Zak <kzak@redhat.com> in Jul 2019
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <pty.h>
@@ -28,7 +16,7 @@
 #include "pty-session.h"
 #include "debug.h"
 
-ul_pty::ul_pty(bool is_stdin_tty, PtyCallback& callback)
+Pty::Pty(bool is_stdin_tty, PtyCallback& callback)
 	: callback{ callback },
 	isterm{ is_stdin_tty },
 	master{ -1 },
@@ -36,47 +24,40 @@ ul_pty::ul_pty(bool is_stdin_tty, PtyCallback& callback)
 	sigfd{ -1 },
 	child{ static_cast<pid_t>(-1) } {}
 
-ul_pty::~ul_pty() {}
+Pty::~Pty() {}
 
-void ul_pty_slave_echo(struct ul_pty *pty, int enable)
-{
+void ul_pty_slave_echo(Pty *pty, int enable) {
 	assert(pty);
 	pty->slave_echo = enable ? 1 : 0;
 }
 
-int ul_pty_get_delivered_signal(struct ul_pty *pty)
-{
+int ul_pty_get_delivered_signal(Pty *pty) {
 	assert(pty);
 	return pty->delivered_signal;
 }
 
-void ul_pty_set_child(struct ul_pty *pty, pid_t child)
-{
+void ul_pty_set_child(Pty *pty, pid_t child) {
 	assert(pty);
 	pty->child = child;
 }
 
-int ul_pty_get_childfd(struct ul_pty *pty)
-{
+int ul_pty_get_childfd(Pty *pty) {
 	assert(pty);
 	return pty->master;
 }
 
-pid_t ul_pty_get_child(struct ul_pty *pty)
-{
+pid_t ul_pty_get_child(Pty *pty) {
 	assert(pty);
 	return pty->child;
 }
 
 /* it's active when signals are redirected to sigfd */
-int ul_pty_is_running(struct ul_pty *pty)
-{
+int ul_pty_is_running(Pty *pty) {
 	assert(pty);
 	return pty->sigfd >= 0;
 }
 
-void ul_pty_set_mainloop_time(struct ul_pty *pty, struct timeval *tv)
-{
+void ul_pty_set_mainloop_time(Pty *pty, struct timeval *tv) {
 	assert(pty);
 	if (!tv) {
 		DBG(pty << ": mainloop time: clear");
@@ -88,8 +69,7 @@ void ul_pty_set_mainloop_time(struct ul_pty *pty, struct timeval *tv)
 	}
 }
 
-static void pty_signals_cleanup(struct ul_pty *pty)
-{
+static void pty_signals_cleanup(Pty *pty) {
 	if (pty->sigfd != -1)
 		close(pty->sigfd);
 	pty->sigfd = -1;
@@ -99,8 +79,7 @@ static void pty_signals_cleanup(struct ul_pty *pty)
 }
 
 /* call me before fork() */
-int ul_pty_setup(struct ul_pty *pty)
-{
+int ul_pty_setup(Pty *pty) {
 	struct termios attrs;
 	sigset_t ourset;
 	int rc = 0;
@@ -179,8 +158,7 @@ done:
 }
 
 /* cleanup in parent process */
-void ul_pty_cleanup(struct ul_pty *pty)
-{
+void ul_pty_cleanup(Pty *pty) {
 	struct termios rtt;
 
 	pty_signals_cleanup(pty);
@@ -193,8 +171,7 @@ void ul_pty_cleanup(struct ul_pty *pty)
 	tcsetattr(STDIN_FILENO, TCSADRAIN, &rtt);
 }
 
-int ul_pty_chownmod_slave(struct ul_pty *pty, uid_t uid, gid_t gid, mode_t mode)
-{
+int ul_pty_chownmod_slave(Pty *pty, uid_t uid, gid_t gid, mode_t mode) {
 	if (fchown(pty->slave, uid, gid))
 		return -errno;
 	if (fchmod(pty->slave, mode))
@@ -203,8 +180,7 @@ int ul_pty_chownmod_slave(struct ul_pty *pty, uid_t uid, gid_t gid, mode_t mode)
 }
 
 /* call me in child process */
-void ul_pty_init_slave(struct ul_pty *pty)
-{
+void ul_pty_init_slave(Pty *pty) {
 	DBG(pty << ": initialize slave");
 
 	setsid();
@@ -230,8 +206,7 @@ void ul_pty_init_slave(struct ul_pty *pty)
 	DBG(pty << ": initialize slave done");
 }
 
-static int write_output(char *obuf, ssize_t bytes)
-{
+static int write_output(char *obuf, ssize_t bytes) {
 	DBG(" writing output");
 
 	if (write_all(STDOUT_FILENO, obuf, bytes)) {
@@ -242,8 +217,7 @@ static int write_output(char *obuf, ssize_t bytes)
 	return 0;
 }
 
-static int write_to_child(struct ul_pty *pty, char *buf, size_t bufsz)
-{
+static int write_to_child(Pty *pty, char *buf, size_t bufsz) {
 	return write_all(pty->master, buf, bufsz);
 }
 
@@ -263,8 +237,7 @@ static int write_to_child(struct ul_pty *pty, char *buf, size_t bufsz)
  * maintains master+slave tty stuff within the session. Use pipe to write to
  * pty and assume non-interactive (tee-like) behavior is NOT well supported.
  */
-void ul_pty_write_eof_to_child(struct ul_pty *pty)
-{
+void ul_pty_write_eof_to_child(Pty *pty) {
 	unsigned int tries = 0;
 	struct pollfd fds[] = {
 	           { .fd = pty->slave, .events = POLLIN }
@@ -284,7 +257,7 @@ void ul_pty_write_eof_to_child(struct ul_pty *pty)
 	write_to_child(pty, &c, sizeof(char));
 }
 
-static int mainloop_callback(ul_pty *pty) {
+static int mainloop_callback(Pty *pty) {
 	if (!pty->callback.useMainLoop()) {
 		return 0;
 	}
@@ -296,7 +269,7 @@ static int mainloop_callback(ul_pty *pty) {
 	return rc;
 }
 
-static int handle_io(ul_pty *pty, int fd, int *eof) {
+static int handle_io(Pty *pty, int fd, int *eof) {
 	char buf[BUFSIZ];
 	ssize_t bytes;
 	sigset_t set;
@@ -341,7 +314,7 @@ static int handle_io(ul_pty *pty, int fd, int *eof) {
 	return pty->callback.logStreamActivity(fd, buf, bytes);
 }
 
-void ul_pty_wait_for_child(ul_pty *pty) {
+void ul_pty_wait_for_child(Pty *pty) {
 	int status;
 	pid_t pid;
 	int options = 0;
@@ -376,7 +349,7 @@ void ul_pty_wait_for_child(ul_pty *pty) {
 	}
 }
 
-static int handle_signal(ul_pty *pty, int fd) {
+static int handle_signal(Pty *pty, int fd) {
 	struct signalfd_siginfo info;
 	ssize_t bytes;
 	int rc = 0;
@@ -442,8 +415,7 @@ static int handle_signal(ul_pty *pty, int fd) {
 }
 
 /* loop in parent */
-int ul_pty_proxy_master(struct ul_pty *pty)
-{
+int ul_pty_proxy_master(Pty *pty) {
 	int rc = 0, ret, eof = 0;
 	enum {
 		POLLFD_SIGNAL = 0,
@@ -598,7 +570,7 @@ int main(int argc, char *argv[])
 	const char *shell, *command = nullptr, *shname = nullptr;
 	int caught_signal = 0;
 	pid_t child;
-	struct ul_pty *pty;
+	struct Pty *pty;
 
 	shell = getenv("SHELL");
 	if (shell == nullptr)

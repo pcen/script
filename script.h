@@ -49,7 +49,7 @@ public:
 	int ttycols;
 	int ttylines;
 
-	struct ul_pty *pty; // pseudo-terminal
+	struct Pty *pty; // pseudo-terminal
 	pid_t child; // child pid
 	int childstatus; // child process exit value
 
@@ -63,16 +63,16 @@ public:
 	ScriptControl();
 	void initTerminalInfo();
 	ScriptLog* associate(ScriptStream* stream, const std::string& filename, ScriptFormat format);
+	int loggingStart();
+	ssize_t logInfo(const char* name, const char* msgfmt, ...);
+	void loggingDone(const char* msg);
 
+	// pty callback methods
 	void childDie(pid_t, int) override;
 	void childSigstop(pid_t) override;
 	int logStreamActivity(int, char*, size_t) override;
 	int logSignal(struct signalfd_siginfo*, void*) override;
 	int flushLogs() override;
 };
-
-int logging_start(ScriptControl *ctl);
-ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...);
-void logging_done(ScriptControl *ctl, const char *msg);
 
 #endif // SCRIPT_H

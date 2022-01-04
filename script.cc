@@ -146,10 +146,8 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 		gettime_monotonic(&now);
 		timersub(&now, &log->starttime, &delta);
 
-		log_info(ctl, "DURATION", "%ld.%06ld",
-			(int64_t)delta.tv_sec,
-			(int64_t)delta.tv_usec);
-		log_info(ctl, "EXIT_CODE", "%d", status);
+		ctl->logInfo("DURATION", "%ld.%06ld", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec);
+		ctl->logInfo("EXIT_CODE", "%d", status);
 		break;
 	}
 	case ScriptFormat::TimingSimple:
@@ -252,19 +250,21 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 	return 0;
 }
 
-int logging_start(ScriptControl *ctl) {
-	/* start all output logs */
-	for (auto log : ctl->out.logs) {
-		int rc = log_start(ctl, log);
-		if (rc)
+int ScriptControl::loggingStart() {
+	// start output logs
+	for (auto log : out.logs) {
+		int rc = log_start(this, log);
+		if (rc) {
 			return rc;
+		}
 	}
 
-	/* start all input logs */
-	for (auto log : ctl->in.logs) {
-		int rc = log_start(ctl, log);
-		if (rc)
+	// start input logs
+	for (auto log : in.logs) {
+		int rc = log_start(this, log);
+		if (rc) {
 			return rc;
+		}
 	}
 	return 0;
 }
@@ -338,7 +338,7 @@ ssize_t log_stream_activity(ScriptControl* ctl, ScriptStream* stream, char* buf,
 	return outsz;
 }
 
-ssize_t  log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
+ssize_t log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
 	ScriptLog *log;
 	struct timeval now, delta;
 	char msg[BUFSIZ] = {0};
@@ -379,17 +379,15 @@ ssize_t  log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
 	return sz;
 }
 
-ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...) {
-	ScriptLog *log;
+ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 	char msg[BUFSIZ] = {0};
 	va_list ap;
 	ssize_t sz;
 
-	assert(ctl);
-
-	log = ctl->infolog;
-	if (!log)
+	ScriptLog* log = infolog;
+	if (!log) {
 		return 0;
+	}
 
 	assert(log->format == ScriptFormat::TimingMulti);
 	DBG("  writing info to multi-stream log");
@@ -399,51 +397,54 @@ ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...) 
 		va_start(ap, msgfmt);
 		rc = vsnprintf(msg, sizeof(msg), msgfmt, ap);
 		va_end(ap);
-		if (rc < 0)
+		if (rc < 0) {
 			*msg = '\0';;
+		}
 	}
 
-	if (*msg)
+	if (*msg) {
 		sz = fprintf(log->fp, "H %f %s %s\n", 0.0, name, msg);
-	else
+	} else {
 		sz = fprintf(log->fp, "H %f %s\n", 0.0, name);
+	}
 
 	return sz;
 }
 
 
-void logging_done(ScriptControl *ctl, const char *msg) {
+void ScriptControl::loggingDone(const char *msg) {
 	int status;
 	size_t i;
 
 	DBG("stop logging");
 
-	if (WIFSIGNALED(ctl->childstatus))
-		status = WTERMSIG(ctl->childstatus) + 0x80;
-	else
-		status = WEXITSTATUS(ctl->childstatus);
+	if (WIFSIGNALED(childstatus)) {
+		status = WTERMSIG(childstatus) + 0x80;
+	} else {
+		status = WEXITSTATUS(childstatus);
+	}
 
 	DBG(" status=" << status);
 
-	/* close all output logs */
-	for (auto log : ctl->out.logs) {
-		log_close(ctl, log, msg, status);
-		log_free(ctl, log);
+	// close all output logs
+	for (auto log : out.logs) {
+		log_close(this, log, msg, status);
+		log_free(this, log);
 	}
-	for (auto log : ctl->out.logs) {
+	for (auto log : out.logs) {
 		delete log;
 	}
-	ctl->out.logs.clear();
+	out.logs.clear();
 
-	/* close all input logs */
-	for (auto log : ctl->in.logs) {
-		log_close(ctl, log, msg, status);
-		log_free(ctl, log);
+	// close all input logs
+	for (auto log : in.logs) {
+		log_close(this, log, msg, status);
+		log_free(this, log);
 	}
-	for (auto log : ctl->in.logs) {
+	for (auto log : in.logs) {
 		delete log;
 	}
-	ctl->in.logs.clear();
+	in.logs.clear();
 }
 
 void ScriptControl::childDie(pid_t child, int status) {
@@ -483,7 +484,7 @@ int ScriptControl::logStreamActivity(int fd, char* buf, size_t bufsz) {
 		if (!quiet)
 			printf("Script terminated, max output files size %lu exceeded.\n", maxsz);
 		DBG("output size " << outsz << ", exceeded limit " << maxsz);
-		logging_done(this, "max output size exceeded");
+		loggingDone("max output size exceeded");
 		return 1;
 	}
 	return 0;

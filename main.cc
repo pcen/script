@@ -223,7 +223,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	ctl.pty = new ul_pty(ctl.isterm, ctl);
+	ctl.pty = new Pty(ctl.isterm, ctl);
 	if (!ctl.pty)
 		err(EXIT_FAILURE, "failed to allocate PTY handler");
 
@@ -285,7 +285,7 @@ int main(int argc, char **argv)
 	// parent
 	ul_pty_set_child(ctl.pty, ctl.child);
 
-	rc = logging_start(&ctl);
+	rc = ctl.loggingStart();
 	if (rc)
 		goto done;
 
@@ -295,23 +295,26 @@ int main(int argc, char **argv)
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		log_info(&ctl, "START_TIME", "%s", buf);
+		ctl.logInfo("START_TIME", "%s", buf);
 
 		if (ctl.isterm) {
 			ctl.initTerminalInfo();
-			log_info(&ctl, "TERM", "%s", ctl.ttytype);
-			log_info(&ctl, "TTY", "%s", ctl.ttyname);
-			log_info(&ctl, "COLUMNS", "%d", ctl.ttycols);
-			log_info(&ctl, "LINES", "%d", ctl.ttylines);
+			ctl.logInfo("TERM", "%s", ctl.ttytype);
+			ctl.logInfo("TTY", "%s", ctl.ttyname);
+			ctl.logInfo("COLUMNS", "%d", ctl.ttycols);
+			ctl.logInfo("LINES", "%d", ctl.ttylines);
 		}
-		log_info(&ctl, "SHELL", "%s", shell);
-		if (command)
-			log_info(&ctl, "COMMAND", "%s", command);
-		log_info(&ctl, "TIMING_LOG", "%s", timingfile);
-		if (outfile)
-			log_info(&ctl, "OUTPUT_LOG", "%s", outfile);
-		if (infile)
-			log_info(&ctl, "INPUT_LOG", "%s", infile);
+		ctl.logInfo("SHELL", "%s", shell);
+		if (command) {
+			ctl.logInfo("COMMAND", "%s", command);
+		}
+		ctl.logInfo("TIMING_LOG", "%s", timingfile);
+		if (outfile) {
+			ctl.logInfo("OUTPUT_LOG", "%s", outfile);
+		}
+		if (infile) {
+			ctl.logInfo("INPUT_LOG", "%s", infile);
+		}
 	}
 
 	// this is the main loop
@@ -333,7 +336,7 @@ int main(int argc, char **argv)
 
 done:
 	ul_pty_cleanup(ctl.pty);
-	logging_done(&ctl, NULL);
+	ctl.loggingDone(nullptr);
 
 	if (!ctl.quiet)
 		printf("Script done.\n");
