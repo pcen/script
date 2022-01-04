@@ -1,6 +1,5 @@
 *.o
 *.txt
 script
-util-linux
 .vscode
 typescript

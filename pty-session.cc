@@ -45,15 +45,13 @@ UL_DEBUG_DEFINE_MASKNAMES(ulpty) = UL_DEBUG_EMPTY_MASKNAMES;
 #define UL_DEBUG_CURRENT_MASK   UL_DEBUG_MASK(ulpty)
 #include "debugobj.h"
 
-void ul_pty_init_debug(int mask)
-{
+void ul_pty_init_debug(int mask) {
 	if (ulpty_debug_mask)
 		return;
 	__UL_INIT_DEBUG_FROM_ENV(ulpty, ULPTY_DEBUG_, mask, ULPTY_DEBUG);
 }
 
-struct ul_pty *ul_new_pty(int is_stdin_tty)
-{
+struct ul_pty *ul_new_pty(int is_stdin_tty) {
 	ul_pty *pty = static_cast<ul_pty*>(calloc(1, sizeof(*pty)));
 
 	if (!pty)
