@@ -70,17 +70,6 @@
 #include "pty-session.h"
 #include "debug.h"
 
-#define USAGE_HEADER     "\nUsage:\n"
-#define USAGE_OPTIONS    "\nOptions:\n"
-
-#define USAGE_HELP_OPTIONS(marg_dsc) \
-		"%-" #marg_dsc "s%s\n" \
-		"%-" #marg_dsc "s%s\n" \
-		, " -h, --help",    "display this help" \
-		, " -V, --version", "display version"
-
-#define USAGE_MAN_TAIL(_man)   "\nFor more details see %s.\n", _man
-
 static UL_DEBUG_DEFINE_MASK(script);
 UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
 
@@ -220,13 +209,13 @@ static inline time_t script_time(time_t *t)
 static void __attribute__((__noreturn__)) usage(void)
 {
 	FILE *out = stdout;
-	fputs(USAGE_HEADER, out);
+	fputs("\nUsage:\n", out);
 	fprintf(out, " %s [options] [file]\n", program_invocation_short_name);
 
 	fputs("\n", out);
 	fputs("Make a typescript of a terminal session.\n", out);
 
-	fputs(USAGE_OPTIONS, out);
+	fputs("\nOptions:\n", out);
 	fputs(" -I, --log-in <file>           log stdin to file\n", out);
 	fputs(" -O, --log-out <file>          log stdout to file (default)\n", out);
 	fputs(" -B, --log-io <file>           log stdin and stdout to file\n", out);
@@ -245,10 +234,10 @@ static void __attribute__((__noreturn__)) usage(void)
 	fputs(" -E, --echo <when>             echo input in session (auto, always or never)\n", out);
 	fputs(" -o, --output-limit <size>     terminate if output files exceed size\n", out);
 	fputs(" -q, --quiet                   be quiet\n", out);
-
 	fputs("\n", out);
-	printf(USAGE_HELP_OPTIONS(31));
-	printf(USAGE_MAN_TAIL("script(1)"));
+
+	fputs(" -h, --help                    display this help\n", out);
+	fputs(" -V, --version                 display version\n", out);
 
 	exit(EXIT_SUCCESS);
 }
@@ -271,7 +260,7 @@ ScriptLog *get_log_by_name(ScriptStream *stream, const std::string& name)
 ScriptLog *log_associate(ScriptControl *ctl, ScriptStream *stream, const std::string& filename, ScriptFormat format) {
 	ScriptLog *log;
 
-	DBG(MISC, ul_debug("associate %s with stream", filename));
+	DBG(MISC, ul_debug("associate %s with stream", filename.c_str()));
 
 	assert(ctl);
 	assert(stream);
@@ -282,30 +271,24 @@ ScriptLog *log_associate(ScriptControl *ctl, ScriptStream *stream, const std::st
 
 	log = get_log_by_name(stream == &ctl->out ? &ctl->in : &ctl->out, filename);
 	if (!log) {
-		/* create a new log */
-		std::cerr << "Creating new log\n";
+		// create a new log
 		log = new ScriptLog();
 		log->filename = filename;
 		log->format = format;
 	}
 
-	std::cerr << "adding log...\n";
-	/* add log to the stream */
+	// add log to the stream
 	stream->logs.push_back(log);
 	stream->nlogs++;
 
-	std::cerr << "number of logs: " << stream->logs.size() << "\n";
-	for (auto l : stream->logs) {
-		if (l == nullptr) std::cerr << "log is nullptr!!\n";
-		std::cerr << "log: " << l->filename << "\n";
-	}
-
-	/* remember where to write info about signals */
+	// remember where to write info about signals
 	if (format == ScriptFormat::TimingMulti) {
-		if (!ctl->siglog)
+		if (!ctl->siglog) {
 			ctl->siglog = log;
-		if (!ctl->infolog)
+		}
+		if (!ctl->infolog) {
 			ctl->infolog = log;
+		}
 	}
 
 	return log;
@@ -317,7 +300,7 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 	if (!log || !log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("closing %s", log->filename));
+	DBG(MISC, ul_debug("closing %s", log->filename.c_str()));
 
 	switch (log->format) {
 	case ScriptFormat::Raw:
@@ -351,7 +334,7 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 	}
 
 	if (close_stream(log->fp) != 0) {
-		warn("write failed: %s", log->filename);
+		warn("write failed: %s", log->filename.c_str());
 		rc = -errno;
 	}
 
@@ -360,20 +343,17 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 	return rc;
 }
 
-static int log_flush(ScriptControl *ctl __attribute__((__unused__)), ScriptLog *log)
-{
-
+static int log_flush(ScriptControl *ctl __attribute__((__unused__)), ScriptLog *log) {
 	if (!log || !log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("flushing %s", log->filename));
+	DBG(MISC, ul_debug("flushing %s", log->filename.c_str()));
 
 	fflush(log->fp);
 	return 0;
 }
 
-static void log_free(ScriptControl *ctl, ScriptLog *log)
-{
+static void log_free(ScriptControl *ctl, ScriptLog *log) {
 	size_t i;
 
 	if (!log)
@@ -402,7 +382,7 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 	if (log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("opening %s", log->filename));
+	DBG(MISC, ul_debug("opening %s", log->filename.c_str()));
 
 	assert(log->fp == NULL);
 
@@ -412,7 +392,7 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 			"a" UL_CLOEXECSTR :
 			"w" UL_CLOEXECSTR);
 	if (!log->fp) {
-		warn("cannot open %s", log->filename);
+		warn("cannot open %s", log->filename.c_str());
 		return -errno;
 	}
 
@@ -485,7 +465,7 @@ static ssize_t log_write(ScriptControl *ctl,
 	if (!log->fp)
 		return 0;
 
-	DBG(IO, ul_debug(" writing [file=%s]", log->filename));
+	DBG(IO, ul_debug(" writing [file=%s]", log->filename.c_str()));
 
 	switch (log->format) {
 	case ScriptFormat::Raw:
@@ -495,7 +475,7 @@ static ssize_t log_write(ScriptControl *ctl,
 
 		rc = fwrite_all(obuf, 1, bytes, log->fp);
 		if (rc) {
-			warn("cannot write %s", log->filename);
+			warn("cannot write %s", log->filename.c_str());
 			return rc;
 		}
 		ssz = bytes;
