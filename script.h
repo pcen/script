@@ -15,7 +15,7 @@ enum class ScriptFormat {
 
 class ScriptLog {
 public:
-	FILE *fp; // file pointer (handler)
+	FILE *fp; // file pointer
 	ScriptFormat format;
 	std::string filename; // on command line specified name
 	struct timeval oldtime; // previous entry log time (timing script only)
@@ -24,6 +24,7 @@ public:
 
 	ScriptLog();
 	int flush();
+	int write(const char* fmt, ...);
 };
 
 class ScriptStream {
@@ -66,6 +67,8 @@ public:
 	ScriptLog* associate(ScriptStream* stream, const std::string& filename, ScriptFormat format);
 	int loggingStart();
 
+	ssize_t logWrite(ScriptStream& stream, ScriptLog* log, char* obuf, size_t bytes);
+	ssize_t logStreamActivity(ScriptStream& stream, char* buf, size_t bytes);
 	ssize_t logSignal(int signum, const char *msgfmt, ...);
 	ssize_t logInfo(const char* name, const char* msgfmt, ...);
 

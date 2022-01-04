@@ -34,12 +34,12 @@
  */
 #include "script.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <getopt.h>
 #include <err.h>
 
+#include <cstdio>
 #include <ctime>
 #include <cassert>
 
@@ -61,6 +61,14 @@ int ScriptLog::flush() {
 	DBG("flushing " << filename);
 
 	return fflush(fp); // 0 on success
+}
+
+int ScriptLog::write(const char* fmt, ...) {
+	va_list ap;
+	va_start(ap, fmt);
+	int rc = std::vfprintf(fp, fmt, ap);
+	va_end(ap);
+	return rc;
 }
 
 ScriptControl::ScriptControl()
@@ -219,20 +227,20 @@ int ScriptControl::startLog(ScriptLog *log) {
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		fprintf(log->fp, "Script started on %s [", buf);
+		log->write("Script started on %s [", buf);
 
 		if (isterm) {
 			initTerminalInfo();
 
 			if (ttytype) {
-				fprintf(log->fp, "TERM=\"%s\" ", ttytype);
+				log->write("TERM=\"%s\" ", ttytype);
 			}
 			if (ttyname) {
-				fprintf(log->fp, "TTY=\"%s\" ", ttyname);
+				log->write("TTY=\"%s\" ", ttyname);
 			}
-			fprintf(log->fp, "COLUMNS=\"%d\" LINES=\"%d\"", ttycols, ttylines);
+			log->write("COLUMNS=\"%d\" LINES=\"%d\"", ttycols, ttylines);
 		} else {
-			fprintf(log->fp, "<not executed on terminal>");
+			log->write("<not executed on terminal>");
 		}
 
 		fputs("]\n", log->fp);
@@ -268,13 +276,14 @@ int ScriptControl::loggingStart() {
 	return 0;
 }
 
-ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char *obuf, size_t bytes) {
+ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf, size_t bytes) {
 	int rc;
 	ssize_t ssz = 0;
 	struct timeval now, delta;
 
-	if (!log->fp)
+	if (!log->fp) {
 		return 0;
+	}
 
 	DBG(" writing [file=" << log->filename << "]");
 
@@ -295,10 +304,10 @@ ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = fprintf(log->fp, "%ld.%06ld %zd\n",
-			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
-		if (ssz < 0)
+		ssz = log->write("%ld.%06ld %zd\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
+		if (ssz < 0) {
 			return -errno;
+		}
 
 		log->oldtime = now;
 		break;
@@ -308,11 +317,10 @@ ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = fprintf(log->fp, "%c %ld.%06ld %zd\n",
-			stream->ident,
-			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
-		if (ssz < 0)
+		ssz = log->write("%c %ld.%06ld %zd\n", stream.ident, (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
+		if (ssz < 0) {
 			return -errno;
+		}
 
 		log->oldtime = now;
 		break;
@@ -320,25 +328,27 @@ ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char
 		break;
 	}
 
-	if (ctl->flush)
-		fflush(log->fp);
+	if (flush) {
+		log->flush();
+	}
 	return ssz;
 }
 
-ssize_t log_stream_activity(ScriptControl* ctl, ScriptStream* stream, char* buf, size_t bytes) {
+// logStreamActivity writes a message to the given script stream
+ssize_t ScriptControl::logStreamActivity(ScriptStream& stream, char* buf, size_t bytes) {
 	ssize_t outsz = 0;
-	for (auto log : stream->logs) {
-		ssize_t ssz = log_write(ctl, stream, log, buf, bytes);
-
-		if (ssz < 0)
+	for (auto log : stream.logs) {
+		ssize_t ssz = logWrite(stream, log, buf, bytes);
+		if (ssz < 0) {
 			return ssz;
+		}
 		outsz += ssz;
 	}
 	return outsz;
 }
 
 // logSignal writes a message to the siglog
-ssize_t ScriptControl::logSignal(int signum, const char *msgfmt, ...) {
+ssize_t ScriptControl::logSignal(int signum, const char* msgfmt, ...) {
 	struct timeval now, delta;
 	char msg[BUFSIZ] = {0};
 	va_list ap;
@@ -365,14 +375,11 @@ ssize_t ScriptControl::logSignal(int signum, const char *msgfmt, ...) {
 		}
 	}
 
-	if (*msg)
-		sz = fprintf(log->fp, "S %ld.%06ld SIG%s %s\n",
-			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec,
-			signum_to_signame(signum), msg);
-	else
-		sz = fprintf(log->fp, "S %ld.%06ld SIG%s\n",
-			(int64_t)delta.tv_sec, (int64_t)delta.tv_usec,
-			signum_to_signame(signum));
+	if (*msg) {
+		sz = log->write("S %ld.%06ld SIG%s %s\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, signum_to_signame(signum), msg);
+	} else {
+		sz = log->write("S %ld.%06ld SIG%s\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, signum_to_signame(signum));
+	}
 
 	log->oldtime = now;
 	return sz;
@@ -403,9 +410,9 @@ ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 	}
 
 	if (*msg) {
-		sz = fprintf(log->fp, "H %f %s %s\n", 0.0, name, msg);
+		sz = log->write("H %f %s %s\n", 0.0, name, msg);
 	} else {
-		sz = fprintf(log->fp, "H %f %s\n", 0.0, name);
+		sz = log->write("H %f %s\n", 0.0, name);
 	}
 
 	return sz;
@@ -460,10 +467,10 @@ int ScriptControl::ptyLogStreamActivity(int fd, char* buf, size_t bufsz) {
 
 	if (fd == STDIN_FILENO) {
 		// from stdin (user) to command
-		ssz = log_stream_activity(this, &in, buf, (size_t) bufsz);
+		ssz = logStreamActivity(in, buf, (size_t) bufsz);
 	} else if (fd == ul_pty_get_childfd(pty)) {
 		// from command (master) to stdout and log
-		ssz = log_stream_activity(this, &out, buf, (size_t) bufsz);
+		ssz = logStreamActivity(out, buf, (size_t) bufsz);
 	}
 
 	if (ssz < 0) {
