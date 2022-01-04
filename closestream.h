@@ -7,15 +7,12 @@
 #endif
 #include <unistd.h>
 
-#include "c.h"
-
 #ifndef CLOSE_EXIT_CODE
 # define CLOSE_EXIT_CODE EXIT_FAILURE
 #endif
 
 static inline int
-close_stream(FILE * stream)
-{
+close_stream(FILE * stream) {
 #ifdef HAVE___FPENDING
 	const int some_pending = (__fpending(stream) != 0);
 #endif
@@ -34,9 +31,7 @@ close_stream(FILE * stream)
 	return 0;
 }
 
-static inline int
-flush_standard_stream(FILE *stream)
-{
+static inline int flush_standard_stream(FILE *stream) {
 	int fd;
 
 	errno = 0;
@@ -61,9 +56,7 @@ error:
 }
 
 /* Meant to be used atexit(close_stdout); */
-static inline void
-close_stdout(void)
-{
+static inline void close_stdout(void) {
 	if (flush_standard_stream(stdout) != 0 && !(errno == EPIPE)) {
 		if (errno)
 			warn("write error");
@@ -76,9 +69,7 @@ close_stdout(void)
 		_exit(CLOSE_EXIT_CODE);
 }
 
-static inline void
-close_stdout_atexit(void)
-{
+static inline void close_stdout_atexit(void) {
 	/*
 	 * Note that close stdout at exit disables ASAN to report memory leaks
 	 */
@@ -87,17 +78,7 @@ close_stdout_atexit(void)
 #endif
 }
 
-#ifndef HAVE_FSYNC
-static inline int
-fsync(int fd __attribute__((__unused__)))
-{
-	return 0;
-}
-#endif
-
-static inline int
-close_fd(int fd)
-{
+static inline int close_fd(int fd) {
 	const int fsync_fail = (fsync(fd) != 0);
 	const int close_fail = (close(fd) != 0);
 

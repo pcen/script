@@ -14,8 +14,11 @@
 #include <string.h>
 #include <errno.h>
 
-#include "c.h"
+#include <cstdlib>
+
 #include "signames.h"
+
+#define ARRAY_SIZE(arr) ((sizeof(arr) / sizeof(*(arr))) / static_cast<size_t>(!(sizeof(arr) % sizeof(*(arr)))))
 
 static const struct ul_signal_name {
 	const char *name;
@@ -101,8 +104,7 @@ static const struct ul_signal_name {
 };
 
 #ifdef SIGRTMIN
-static int rtsig_to_signum(const char *sig)
-{
+static int rtsig_to_signum(const char *sig) {
 	int num, maxi = 0;
 	char *ep = NULL;
 
@@ -115,7 +117,7 @@ static int rtsig_to_signum(const char *sig)
 	if (!isdigit(*sig))
 		return -1;
 	errno = 0;
-	num = strtol(sig, &ep, 10);
+	num = std::strtol(sig, &ep, 10);
 	if (!ep || sig == ep || errno || num < 0)
 		return -1;
 	num = maxi ? SIGRTMAX - num : SIGRTMIN + num;
@@ -125,8 +127,7 @@ static int rtsig_to_signum(const char *sig)
 }
 #endif
 
-int signame_to_signum(const char *sig)
-{
+int signame_to_signum(const char *sig) {
 	size_t n;
 
 	if (!strncasecmp(sig, "sig", 3))
@@ -144,8 +145,7 @@ int signame_to_signum(const char *sig)
 	return -1;
 }
 
-const char *signum_to_signame(int signum)
-{
+const char* signum_to_signame(int signum) {
 	size_t n;
 
 	for (n = 0; n < ARRAY_SIZE(ul_signames); n++) {
@@ -157,8 +157,7 @@ const char *signum_to_signame(int signum)
 	return NULL;
 }
 
-int get_signame_by_idx(size_t idx, const char **signame, int *signum)
-{
+int get_signame_by_idx(size_t idx, const char **signame, int *signum) {
 	if (idx >= ARRAY_SIZE(ul_signames))
 		return -1;
 
@@ -167,6 +166,4 @@ int get_signame_by_idx(size_t idx, const char **signame, int *signum)
 	if (signum)
 		*signum = ul_signames[idx].val;
 	return 0;
-
 }
-

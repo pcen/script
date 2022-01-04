@@ -3,19 +3,21 @@
 
 #include <assert.h>
 
-#include "c.h"
 #include "cctype.h"
 
-static inline const char *option_to_longopt(int c, const struct option *opts)
-{
+static inline const char *option_to_longopt(int c, const struct option *opts) {
 	const struct option *o;
 
-	assert(!(opts == NULL));
-	for (o = opts; o->name; o++)
-		if (o->val == c)
+	assert(!(opts == nullptr));
+	for (o = opts; o->name; o++) {
+		if (o->val == c) {
 			return o->name;
-	return NULL;
+		}
+	}
+	return nullptr;
 }
+
+#define ARRAY_SIZE(arr) ((sizeof(arr) / sizeof(*(arr))) / static_cast<size_t>(!(sizeof(arr) % sizeof(*(arr)))))
 
 #ifndef OPTUTILS_EXIT_CODE
 # define OPTUTILS_EXIT_CODE EXIT_FAILURE

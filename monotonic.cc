@@ -7,16 +7,15 @@
  */
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 #ifdef HAVE_SYSINFO
 #include <sys/sysinfo.h>
 #endif
 #include <sys/time.h>
 
-#include "c.h"
 #include "monotonic.h"
 
-int get_boot_time(struct timeval *boot_time)
-{
+int get_boot_time(struct timeval *boot_time) {
 #ifdef CLOCK_BOOTTIME
 	struct timespec hires_uptime;
 	struct timeval lores_uptime;
@@ -48,8 +47,7 @@ int get_boot_time(struct timeval *boot_time)
 #endif
 }
 
-time_t get_suspended_time(void)
-{
+time_t get_suspended_time(void) {
 #if defined(CLOCK_BOOTTIME) && defined(CLOCK_MONOTONIC)
 	struct timespec boot, mono;
 
@@ -60,8 +58,7 @@ time_t get_suspended_time(void)
 	return 0;
 }
 
-int gettime_monotonic(struct timeval *tv)
-{
+int gettime_monotonic(struct timeval *tv) {
 #ifdef CLOCK_MONOTONIC
 	/* Can slew only by ntp and adjtime */
 	int ret;
@@ -77,5 +74,3 @@ int gettime_monotonic(struct timeval *tv)
 	return gettimeofday(tv, NULL);
 #endif
 }
-
-

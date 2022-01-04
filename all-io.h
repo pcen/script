@@ -13,11 +13,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
-#ifdef HAVE_SYS_SENDFILE_H
-# include <sys/sendfile.h>
-#endif
-
-#include "c.h"
 
 inline int write_all(int fd, const void *buf, size_t count) {
 	while (count) {

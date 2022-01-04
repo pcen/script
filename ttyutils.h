@@ -25,20 +25,20 @@
 #define TTYGRPNAME      "tty"   /* name of group to own ttys */
 
 /* Some shorthands for control characters. */
-#define CTL(x)		((x) ^ 0100)	/* Assumes ASCII dialect */
-#define CR		CTL('M')	/* carriage return */
-#define NL		CTL('J')	/* line feed */
-#define BS		CTL('H')	/* back space */
-#define DEL		CTL('?')	/* delete */
+#define CTL(x) ((x) ^ 0100) /* Assumes ASCII dialect */
+#define CR     CTL('M')     /* carriage return */
+#define NL     CTL('J')     /* line feed */
+#define BS     CTL('H')     /* back space */
+#define DEL    CTL('?')     /* delete */
 
 /* Defaults for line-editing etc. characters; you may want to change these. */
-#define DEF_ERASE	DEL		/* default erase character */
-#define DEF_INTR	CTL('C')	/* default interrupt character */
-#define DEF_QUIT	CTL('\\')	/* default quit char */
-#define DEF_KILL	CTL('U')	/* default kill char */
-#define DEF_EOF		CTL('D')	/* default EOF char */
-#define DEF_EOL		0
-#define DEF_SWITCH	0		/* default switch char */
+#define DEF_ERASE  DEL       /* default erase character */
+#define DEF_INTR   CTL('C')  /* default interrupt character */
+#define DEF_QUIT   CTL('\\') /* default quit char */
+#define DEF_KILL   CTL('U')  /* default kill char */
+#define DEF_EOF    CTL('D')  /* default EOF char */
+#define DEF_EOL    0
+#define DEF_SWITCH 0         /* default switch char */
 
 /* Fallback for termios->c_cc[] */
 #ifndef CREPRINT

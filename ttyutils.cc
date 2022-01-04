@@ -6,13 +6,12 @@
  */
 #include <ctype.h>
 #include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
-#include "c.h"
 #include "ttyutils.h"
 
-
-static int get_env_int(const char *name)
-{
+static int get_env_int(const char *name) {
 	const char *cp = getenv(name);
 
 	if (cp) {
@@ -22,16 +21,15 @@ static int get_env_int(const char *name)
 		errno = 0;
 		x = strtol(cp, &end, 10);
 
-		if (errno == 0 && end && *end == '\0' && end > cp &&
-		    x > 0 && x <= INT_MAX)
+		if (errno == 0 && end && *end == '\0' && end > cp && x > 0 && x <= INT_MAX) {
 			return x;
+		}
 	}
 
 	return -1;
 }
 
-int get_terminal_dimension(int *cols, int *lines)
-{
+int get_terminal_dimension(int *cols, int *lines) {
 	int c = 0, l = 0;
 
 #if defined(TIOCGWINSZ)
@@ -60,8 +58,7 @@ int get_terminal_dimension(int *cols, int *lines)
 	return 0;
 }
 
-int get_terminal_width(int default_width)
-{
+int get_terminal_width(int default_width) {
 	int width = 0;
 
 	get_terminal_dimension(&width, NULL);
@@ -69,8 +66,7 @@ int get_terminal_width(int default_width)
 	return width > 0 ? width : default_width;
 }
 
-int get_terminal_stdfd(void)
-{
+int get_terminal_stdfd(void) {
 	if (isatty(STDIN_FILENO))
 		return STDIN_FILENO;
 	if (isatty(STDOUT_FILENO))
@@ -81,10 +77,7 @@ int get_terminal_stdfd(void)
 	return -EINVAL;
 }
 
-int get_terminal_name(const char **path,
-		      const char **name,
-		      const char **number)
-{
+int get_terminal_name(const char **path, const char **name, const char **number) {
 	const char *tty;
 	const char *p;
 	int fd;

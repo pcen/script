@@ -20,7 +20,9 @@
 #include <sys/wait.h>
 #include <inttypes.h>
 
-#include "c.h"
+#include <cassert>
+
+#include "utils.h"
 #include "all-io.h"
 #include "ttyutils.h"
 #include "pty-session.h"

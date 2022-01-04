@@ -54,13 +54,14 @@
 #include <sys/signalfd.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <err.h>
 
 #include <string>
 #include <vector>
 #include <ctime>
 
+#include "utils.h"
 #include "closestream.h"
-#include "c.h"
 #include "ttyutils.h"
 #include "all-io.h"
 #include "monotonic.h"
@@ -68,6 +69,17 @@
 #include "signames.h"
 #include "pty-session.h"
 #include "debug.h"
+
+#define USAGE_HEADER     "\nUsage:\n"
+#define USAGE_OPTIONS    "\nOptions:\n"
+
+#define USAGE_HELP_OPTIONS(marg_dsc) \
+		"%-" #marg_dsc "s%s\n" \
+		"%-" #marg_dsc "s%s\n" \
+		, " -h, --help",    "display this help" \
+		, " -V, --version", "display version"
+
+#define USAGE_MAN_TAIL(_man)   "\nFor more details see %s.\n", _man
 
 static UL_DEBUG_DEFINE_MASK(script);
 UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
@@ -81,10 +93,6 @@ auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
 
 #define DBG(m, x)    __UL_DBG(script, SCRIPT_DEBUG_, m, x)
 #define ON_DBG(m, x) __UL_DBG_CALL(script, SCRIPT_DEBUG_, m, x)
-
-#ifdef HAVE_LIBUTEMPTER
-# include <utempter.h>
-#endif
 
 auto constexpr DEFAULT_TYPESCRIPT_FILENAME = "typescript";
 
@@ -183,7 +191,7 @@ static void script_init_debug(void)
 static void init_terminal_info(ScriptControl *ctl)
 {
 	if (ctl->ttyname || !ctl->isterm)
-		return;		/* already initialized */
+		return; // already initialized
 
 	get_terminal_dimension(&ctl->ttycols, &ctl->ttylines);
 	get_terminal_name(&ctl->ttyname, NULL, NULL);
@@ -215,19 +223,19 @@ static void __attribute__((__noreturn__)) usage(void)
 	fputs(USAGE_HEADER, out);
 	fprintf(out, " %s [options] [file]\n", program_invocation_short_name);
 
-	fputs(USAGE_SEPARATOR, out);
+	fputs("\n", out);
 	fputs("Make a typescript of a terminal session.\n", out);
 
 	fputs(USAGE_OPTIONS, out);
 	fputs(" -I, --log-in <file>           log stdin to file\n", out);
 	fputs(" -O, --log-out <file>          log stdout to file (default)\n", out);
 	fputs(" -B, --log-io <file>           log stdin and stdout to file\n", out);
-	fputs(USAGE_SEPARATOR, out);
+	fputs("\n", out);
 
 	fputs(" -T, --log-timing <file>       log timing information to file\n", out);
 	fputs(" -t[<file>], --timing[=<file>] deprecated alias to -T (default file is stderr)\n", out);
 	fputs(" -m, --logging-format <name>   force to 'classic' or 'advanced' format\n", out);
-	fputs(USAGE_SEPARATOR, out);
+	fputs("\n", out);
 
 	fputs(" -a, --append                  append to the log file\n", out);
 	fputs(" -c, --command <command>       run command rather than interactive shell\n", out);
@@ -238,7 +246,7 @@ static void __attribute__((__noreturn__)) usage(void)
 	fputs(" -o, --output-limit <size>     terminate if output files exceed size\n", out);
 	fputs(" -q, --quiet                   be quiet\n", out);
 
-	fputs(USAGE_SEPARATOR, out);
+	fputs("\n", out);
 	printf(USAGE_HELP_OPTIONS(31));
 	printf(USAGE_MAN_TAIL("script(1)"));
 
@@ -390,9 +398,7 @@ static void log_free(ScriptControl *ctl, ScriptLog *log)
 	free(log);
 }
 
-static int log_start(ScriptControl *ctl,
-		      ScriptLog *log)
-{
+static int log_start(ScriptControl *ctl, ScriptLog *log) {
 	if (log->initialized)
 		return 0;
 
@@ -905,7 +911,8 @@ int main(int argc, char **argv)
 		case 'h':
 			usage();
 		default:
-			errtryhelp(EXIT_FAILURE);
+			fprintf(stderr, "Try '%s --help' for more information.\n", program_invocation_short_name);
+			exit(EXIT_FAILURE);
 		}
 	}
 	argc -= optind;
