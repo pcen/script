@@ -36,6 +36,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <paths.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -71,19 +72,6 @@
 #include "signames.h"
 #include "pty-session.h"
 #include "debug.h"
-
-auto constexpr SCRIPT_DEBUG_INIT   = (1 << 1);
-auto constexpr SCRIPT_DEBUG_PTY    = (1 << 2);
-auto constexpr SCRIPT_DEBUG_IO     = (1 << 3);
-auto constexpr SCRIPT_DEBUG_SIGNAL = (1 << 4);
-auto constexpr SCRIPT_DEBUG_MISC   = (1 << 5);
-auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
-
-static UL_DEBUG_DEFINE_MASK(script);
-UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
-
-#define DBG(m, x)    __UL_DBG(script, SCRIPT_DEBUG_, m, x)
-#define ON_DBG(m, x) __UL_DBG_CALL(script, SCRIPT_DEBUG_, m, x)
 
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
@@ -122,7 +110,7 @@ ScriptLog *get_log_by_name(ScriptStream *stream, const std::string& name)
 ScriptLog *log_associate(ScriptControl *ctl, ScriptStream *stream, const std::string& filename, ScriptFormat format) {
 	ScriptLog *log;
 
-	DBG(MISC, ul_debug("associate %s with stream", filename.c_str()));
+	DBG("associate" << filename << " with stream");
 
 	assert(ctl);
 	assert(stream);
@@ -162,7 +150,7 @@ int log_close(ScriptControl *ctl, ScriptLog *log, const char *msg, int status) {
 	if (!log || !log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("closing %s", log->filename.c_str()));
+	DBG("closing " << log->filename);
 
 	switch (log->format) {
 	case ScriptFormat::Raw:
@@ -208,7 +196,7 @@ static int log_flush(ScriptControl *ctl __attribute__((__unused__)), ScriptLog *
 	if (!log || !log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("flushing %s", log->filename.c_str()));
+	DBG("flushing " << log->filename);
 
 	fflush(log->fp);
 	return 0;
@@ -243,7 +231,7 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 	if (log->initialized)
 		return 0;
 
-	DBG(MISC, ul_debug("opening %s", log->filename.c_str()));
+	DBG("opening " << log->filename);
 
 	assert(log->fp == NULL);
 
@@ -312,11 +300,7 @@ int logging_start(ScriptControl *ctl) {
 	return 0;
 }
 
-static ssize_t log_write(ScriptControl *ctl,
-		      ScriptStream *stream,
-		      ScriptLog *log,
-		      char *obuf, size_t bytes)
-{
+ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char *obuf, size_t bytes) {
 	int rc;
 	ssize_t ssz = 0;
 	struct timeval now, delta;
@@ -324,13 +308,11 @@ static ssize_t log_write(ScriptControl *ctl,
 	if (!log->fp)
 		return 0;
 
-	DBG(IO, ul_debug(" writing [file=%s]", log->filename.c_str()));
+	DBG(" writing [file=" << log->filename << "]");
 
 	switch (log->format) {
 	case ScriptFormat::Raw:
-		DBG(IO, ul_debug("  log raw data"));
-
-		// printf("\n\nraw data: %s\n\n", obuf);
+		DBG("  log raw data");
 
 		rc = fwrite_all(obuf, 1, bytes, log->fp);
 		if (rc) {
@@ -341,7 +323,7 @@ static ssize_t log_write(ScriptControl *ctl,
 		break;
 
 	case ScriptFormat::TimingSimple:
-		DBG(IO, ul_debug("  log timing info"));
+		DBG("  log timing info");
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
@@ -354,7 +336,7 @@ static ssize_t log_write(ScriptControl *ctl,
 		break;
 
 	case ScriptFormat::TimingMulti:
-		DBG(IO, ul_debug("  log multi-stream timing info"));
+		DBG("  log multi-stream timing info");
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
@@ -394,9 +376,7 @@ static ssize_t log_stream_activity(
 	return outsz;
 }
 
-static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
-	log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...)
-{
+ssize_t  log_signal(ScriptControl *ctl, int signum, const char *msgfmt, ...) {
 	ScriptLog *log;
 	struct timeval now, delta;
 	char msg[BUFSIZ] = {0};
@@ -410,7 +390,7 @@ static ssize_t __attribute__ ((__format__ (__printf__, 3, 4)))
 		return 0;
 
 	assert(log->format == ScriptFormat::TimingMulti);
-	DBG(IO, ul_debug("  writing signal to multi-stream timing"));
+	DBG("  writing signal to multi-stream timing");
 
 	gettime_monotonic(&now);
 	timersub(&now, &log->oldtime, &delta);
@@ -450,7 +430,7 @@ ssize_t log_info(ScriptControl *ctl, const char *name, const char *msgfmt, ...) 
 		return 0;
 
 	assert(log->format == ScriptFormat::TimingMulti);
-	DBG(IO, ul_debug("  writing info to multi-stream log"));
+	DBG("  writing info to multi-stream log");
 
 	if (msgfmt) {
 		int rc;
@@ -474,14 +454,14 @@ void logging_done(ScriptControl *ctl, const char *msg) {
 	int status;
 	size_t i;
 
-	DBG(MISC, ul_debug("stop logging"));
+	DBG("stop logging");
 
 	if (WIFSIGNALED(ctl->childstatus))
 		status = WTERMSIG(ctl->childstatus) + 0x80;
 	else
 		status = WEXITSTATUS(ctl->childstatus);
 
-	DBG(MISC, ul_debug(" status=%d", status));
+	DBG(" status=" << status);
 
 	/* close all output logs */
 	for (i = 0; i < ctl->out.nlogs; i++) {
@@ -516,9 +496,9 @@ void callback_child_die(void* data, pid_t child, int status) {
 }
 
 void callback_child_sigstop(void* data, pid_t child) {
-	DBG(SIGNAL, ul_debug(" child stop by SIGSTOP -- stop parent too"));
+	DBG(" child stop by SIGSTOP -- stop parent too");
 	kill(getpid(), SIGSTOP);
-	DBG(SIGNAL, ul_debug(" resume"));
+	DBG(" resume");
 	kill(child, SIGCONT);
 }
 
@@ -526,7 +506,7 @@ int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz) {
 	ScriptControl *ctl = (ScriptControl *) data;
 	ssize_t ssz = 0;
 
-	DBG(IO, ul_debug("stream activity callback"));
+	DBG("stream activity callback");
 
 	/* from stdin (user) to command */
 	if (fd == STDIN_FILENO)
@@ -539,8 +519,7 @@ int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz) {
 	if (ssz < 0)
 		return (int) ssz;
 
-	DBG(IO, ul_debug(" append %ld bytes [summary=%zu, max=%zu]", ssz,
-				ctl->outsz, ctl->maxsz));
+	DBG(" append " << ssz << " bytes [summary=" << ctl->outsz << ", max=" << ctl->maxsz << "]");
 
 	ctl->outsz += ssz;
 
@@ -548,7 +527,7 @@ int callback_log_stream_activity(void* data, int fd, char* buf, size_t bufsz) {
 	if (ctl->maxsz != 0 && ctl->outsz >= ctl->maxsz) {
 		if (!ctl->quiet)
 			printf("Script terminated, max output files size %lu exceeded.\n", ctl->maxsz);
-		DBG(IO, ul_debug("output size %lu, exceeded limit %lu", ctl->outsz, ctl->maxsz));
+		DBG("output size " << ctl->outsz << ", exceeded limit " << ctl->maxsz);
 		logging_done(ctl, "max output size exceeded");
 		return 1;
 	}
@@ -563,8 +542,7 @@ int callback_log_signal(void* data, struct signalfd_siginfo* info, void* sigdata
 	case SIGWINCH:
 	{
 		struct winsize *win = (struct winsize *) sigdata;
-		ssz = log_signal(ctl, info->ssi_signo, "ROWS=%d COLS=%d",
-					win->ws_row, win->ws_col);
+		ssz = log_signal(ctl, info->ssi_signo, "ROWS=%d COLS=%d", win->ws_row, win->ws_col);
 		break;
 	}
 	case SIGTERM:

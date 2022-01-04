@@ -29,35 +29,13 @@
 #include "monotonic.h"
 #include "debug.h"
 
-static UL_DEBUG_DEFINE_MASK(ulpty);
-UL_DEBUG_DEFINE_MASKNAMES(ulpty) = UL_DEBUG_EMPTY_MASKNAMES;
-
-#define ULPTY_DEBUG_INIT	(1 << 1)
-#define ULPTY_DEBUG_SETUP	(1 << 2)
-#define ULPTY_DEBUG_SIG		(1 << 3)
-#define ULPTY_DEBUG_IO		(1 << 4)
-#define ULPTY_DEBUG_DONE	(1 << 5)
-#define ULPTY_DEBUG_ALL		0xFFFF
-
-#define DBG(m, x)       __UL_DBG(ulpty, ULPTY_DEBUG_, m, x)
-#define ON_DBG(m, x)    __UL_DBG_CALL(ulpty, ULPTY_DEBUG_, m, x)
-
-#define UL_DEBUG_CURRENT_MASK   UL_DEBUG_MASK(ulpty)
-#include "debugobj.h"
-
-void ul_pty_init_debug(int mask) {
-	if (ulpty_debug_mask)
-		return;
-	__UL_INIT_DEBUG_FROM_ENV(ulpty, ULPTY_DEBUG_, mask, ULPTY_DEBUG);
-}
-
 struct ul_pty *ul_new_pty(int is_stdin_tty) {
 	ul_pty *pty = static_cast<ul_pty*>(calloc(1, sizeof(*pty)));
 
 	if (!pty)
 		return NULL;
 
-	DBG(SETUP, ul_debugobj(pty, "alloc handler"));
+	DBG("[" << pty << "]" << " alloc handler");
 	pty->isterm = is_stdin_tty;
 	pty->master = -1;
 	pty->slave = -1;
@@ -125,13 +103,12 @@ void ul_pty_set_mainloop_time(struct ul_pty *pty, struct timeval *tv)
 {
 	assert(pty);
 	if (!tv) {
-		DBG(IO, ul_debugobj(pty, "mainloop time: clear"));
+		DBG(pty << ": mainloop time: clear");
 		timerclear(&pty->next_callback_time);
 	} else {
 		pty->next_callback_time.tv_sec = tv->tv_sec;
 		pty->next_callback_time.tv_usec = tv->tv_usec;
-		DBG(IO, ul_debugobj(pty, "mainloop time: %ld.%06ld",
-				(int64_t) tv->tv_sec, (int64_t) tv->tv_usec));
+		DBG(pty << ": mainloop time: "<< (int64_t) tv->tv_sec << "." << (int64_t) tv->tv_usec);
 	}
 }
 
@@ -158,7 +135,7 @@ int ul_pty_setup(struct ul_pty *pty)
 	sigprocmask(0, NULL, &pty->orgsig);
 
 	if (pty->isterm) {
-	        DBG(SETUP, ul_debugobj(pty, "create for terminal"));
+		DBG(pty << ": create for terminal");
 
 		/* original setting of the current terminal */
 		if (tcgetattr(STDIN_FILENO, &pty->stdin_attrs) != 0) {
@@ -182,7 +159,7 @@ int ul_pty_setup(struct ul_pty *pty)
 		cfmakeraw(&attrs);
 		tcsetattr(STDIN_FILENO, TCSANOW, &attrs);
 	} else {
-	        DBG(SETUP, ul_debugobj(pty, "create for non-terminal"));
+		DBG(pty << ": create for non-terminal");
 
 		rc = openpty(&pty->master, &pty->slave, NULL, NULL, NULL);
 		if (rc)
@@ -221,8 +198,7 @@ done:
 	if (rc)
 		ul_pty_cleanup(pty);
 
-	DBG(SETUP, ul_debugobj(pty, "pty setup done [master=%d, slave=%d, rc=%d]",
-				pty->master, pty->slave, rc));
+	DBG(pty << ": pty setup done [master=" << pty->master << ", slave=" << pty->slave << ", rc=" << rc << "]");
 	return rc;
 }
 
@@ -236,7 +212,7 @@ void ul_pty_cleanup(struct ul_pty *pty)
 	if (pty->master == -1 || !pty->isterm)
 		return;
 
-	DBG(DONE, ul_debugobj(pty, "cleanup"));
+	DBG(pty << ": cleanup");
 	rtt = pty->stdin_attrs;
 	tcsetattr(STDIN_FILENO, TCSADRAIN, &rtt);
 }
@@ -253,7 +229,7 @@ int ul_pty_chownmod_slave(struct ul_pty *pty, uid_t uid, gid_t gid, mode_t mode)
 /* call me in child process */
 void ul_pty_init_slave(struct ul_pty *pty)
 {
-	DBG(SETUP, ul_debugobj(pty, "initialize slave"));
+	DBG(pty << ": initialize slave");
 
 	setsid();
 
@@ -275,15 +251,15 @@ void ul_pty_init_slave(struct ul_pty *pty)
 
 	sigprocmask(SIG_SETMASK, &pty->orgsig, NULL);
 
-	DBG(SETUP, ul_debugobj(pty, "... initialize slave done"));
+	DBG(pty << ": initialize slave done");
 }
 
 static int write_output(char *obuf, ssize_t bytes)
 {
-	DBG(IO, ul_debug(" writing output"));
+	DBG(" writing output");
 
 	if (write_all(STDOUT_FILENO, obuf, bytes)) {
-		DBG(IO, ul_debug("  writing output *failed*"));
+		DBG("  writing output *failed*");
 		return -errno;
 	}
 
@@ -319,16 +295,16 @@ void ul_pty_write_eof_to_child(struct ul_pty *pty)
 	};
 	char c = DEF_EOF;
 
-	DBG(IO, ul_debugobj(pty, " waiting for empty slave"));
+	DBG(pty << ": waiting for empty slave");
 	while (poll(fds, 1, 10) == 1 && tries < 8) {
-		DBG(IO, ul_debugobj(pty, "   slave is not empty"));
+		DBG(pty << ": slave is not empty");
 		xusleep(250000);
 		tries++;
 	}
 	if (tries < 8)
-		DBG(IO, ul_debugobj(pty, "   slave is empty now"));
+		DBG(pty << ": slave is empty now");
 
-	DBG(IO, ul_debugobj(pty, " sending EOF to master"));
+	DBG(pty << ": sending EOF to master");
 	write_to_child(pty, &c, sizeof(char));
 }
 
@@ -339,10 +315,10 @@ static int mainloop_callback(struct ul_pty *pty)
 	if (!pty->callbacks.mainloop)
 		return 0;
 
-	DBG(IO, ul_debugobj(pty, "calling mainloop callback"));
+	DBG(pty << ": calling mainloop callback");
 	rc = pty->callbacks.mainloop(pty->callback_data);
 
-	DBG(IO, ul_debugobj(pty, " callback done [rc=%d]", rc));
+	DBG(pty << ": callback done [rc=" << rc << "]");
 	return rc;
 }
 
@@ -353,7 +329,7 @@ static int handle_io(struct ul_pty *pty, int fd, int *eof)
 	int rc = 0;
 	sigset_t set;
 
-	DBG(IO, ul_debugobj(pty, " handle I/O on fd=%d", fd));
+	DBG(pty << ": handle I/O on fd=" << fd);
 	*eof = 0;
 
 	sigemptyset(&set);
@@ -375,7 +351,7 @@ static int handle_io(struct ul_pty *pty, int fd, int *eof)
 
 	/* from stdin (user) to command */
 	if (fd == STDIN_FILENO) {
-		DBG(IO, ul_debugobj(pty, " stdin --> master %zd bytes", bytes));
+		DBG(pty << ": stdin --> master " << bytes << " bytes");
 
 		if (write_to_child(pty, buf, bytes))
 			return -errno;
@@ -386,7 +362,7 @@ static int handle_io(struct ul_pty *pty, int fd, int *eof)
 
 	/* from command (master) to stdout */
 	} else if (fd == pty->master) {
-		DBG(IO, ul_debugobj(pty, " master --> stdout %zd bytes", bytes));
+		DBG(pty << ": master --> stdout " << bytes << " bytes");
 		write_output(buf, bytes);
 	}
 
@@ -406,14 +382,14 @@ void ul_pty_wait_for_child(struct ul_pty *pty)
 	if (pty->child == (pid_t) -1)
 		return;
 
-	DBG(SIG, ul_debug("waiting for child [child=%d]", (int) pty->child));
+	DBG("waiting for child [child=" << pty->child << "]");
 
 	if (ul_pty_is_running(pty)) {
 		/* wait for specific child */
 		options = WNOHANG;
 		for (;;) {
 			pid = waitpid(pty->child, &status, options);
-			DBG(SIG, ul_debug(" waitpid done [rc=%d]", (int) pid));
+			DBG(" waitpid done [rc=" << pid << "]");
 			if (pid != (pid_t) - 1) {
 				if (pty->callbacks.child_die)
 					pty->callbacks.child_die(
@@ -426,7 +402,7 @@ void ul_pty_wait_for_child(struct ul_pty *pty)
 	} else {
 		/* final wait */
 		while ((pid = waitpid(-1, &status, options)) > 0) {
-			DBG(SIG, ul_debug(" waitpid done [rc=%d]", (int) pid));
+			DBG("waitpid done [rc=" << pid << "]");
 			if (pid == pty->child) {
 				if (pty->callbacks.child_die)
 					pty->callbacks.child_die(
@@ -444,7 +420,7 @@ static int handle_signal(struct ul_pty *pty, int fd)
 	ssize_t bytes;
 	int rc = 0;
 
-	DBG(SIG, ul_debugobj(pty, " handle signal on fd=%d", fd));
+	DBG(pty << ": handle signal on fd=" << fd);
 
 	bytes = read(fd, &info, sizeof(info));
 	if (bytes != sizeof(info)) {
@@ -455,31 +431,26 @@ static int handle_signal(struct ul_pty *pty, int fd)
 
 	switch (info.ssi_signo) {
 	case SIGCHLD:
-		DBG(SIG, ul_debugobj(pty, " get signal SIGCHLD"));
+		DBG(pty << ": get signal SIGCHLD");
 
-		if (info.ssi_code == CLD_EXITED
-		    || info.ssi_code == CLD_KILLED
-		    || info.ssi_code == CLD_DUMPED) {
-
+		if (info.ssi_code == CLD_EXITED || info.ssi_code == CLD_KILLED || info.ssi_code == CLD_DUMPED) {
 			if (pty->callbacks.child_wait)
-				pty->callbacks.child_wait(pty->callback_data,
-							  pty->child);
+				pty->callbacks.child_wait(pty->callback_data, pty->child);
 			else
 				ul_pty_wait_for_child(pty);
 
 		} else if (info.ssi_status == SIGSTOP && pty->child > 0) {
-			pty->callbacks.child_sigstop(pty->callback_data,
-						     pty->child);
+			pty->callbacks.child_sigstop(pty->callback_data, pty->child);
 		}
 
 		if (pty->child <= 0) {
-			DBG(SIG, ul_debugobj(pty, " no child, setting leaving timeout"));
+			DBG(pty << ": no child, setting leaving timeout");
 			pty->poll_timeout = 10;
 			timerclear(&pty->next_callback_time);
 		}
 		return 0;
 	case SIGWINCH:
-		DBG(SIG, ul_debugobj(pty, " get signal SIGWINCH"));
+		DBG(pty << ": get signal SIGWINCH");
 		if (pty->isterm) {
 			ioctl(STDIN_FILENO, TIOCGWINSZ, (char *)&pty->win);
 			ioctl(pty->slave, TIOCSWINSZ, (char *)&pty->win);
@@ -494,18 +465,17 @@ static int handle_signal(struct ul_pty *pty, int fd)
 	case SIGINT:
 		/* fallthrough */
 	case SIGQUIT:
-		DBG(SIG, ul_debugobj(pty, " get signal SIG{TERM,INT,QUIT}"));
+		DBG(pty << ": get signal SIG{TERM,INT,QUIT}");
 		pty->delivered_signal = info.ssi_signo;
-                /* Child termination is going to generate SIGCHLD (see above) */
+		/* Child termination is going to generate SIGCHLD (see above) */
 		if (pty->child > 0)
-	                kill(pty->child, SIGTERM);
+			kill(pty->child, SIGTERM);
 
 		if (pty->callbacks.log_signal)
-			rc = pty->callbacks.log_signal(pty->callback_data,
-					&info, (void *) &pty->win);
+			rc = pty->callbacks.log_signal(pty->callback_data, &info, (void *) &pty->win);
 		break;
 	case SIGUSR1:
-		DBG(SIG, ul_debugobj(pty, " get signal SIGUSR1"));
+		DBG(pty << ": get signal SIGUSR1");
 		if (pty->callbacks.flush_logs)
 			rc = pty->callbacks.flush_logs(pty->callback_data);
 		break;
@@ -542,13 +512,13 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 		size_t i;
 		int errsv, timeout;
 
-		DBG(IO, ul_debugobj(pty, "--poll() loop--"));
+		DBG(pty << ": --poll() loop--");
 
 		/* note, callback usually updates @next_callback_time */
 		if (timerisset(&pty->next_callback_time)) {
 			struct timeval now;
 
-			DBG(IO, ul_debugobj(pty, " callback requested"));
+			DBG(pty << ": callback requested");
 			gettime_monotonic(&now);
 			if (timercmp(&now, &pty->next_callback_time, >)) {
 				rc = mainloop_callback(pty);
@@ -568,11 +538,11 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 			timeout = pty->poll_timeout;
 
 		/* wait for input, signal or timeout */
-		DBG(IO, ul_debugobj(pty, "calling poll() [timeout=%dms]", timeout));
+		DBG(pty << ": calling poll() [timeout=" << timeout << "ms]");
 		ret = poll(pfd, ARRAY_SIZE(pfd), timeout);
 
 		errsv = errno;
-		DBG(IO, ul_debugobj(pty, "poll() rc=%d", ret));
+		DBG(pty << ": poll() rc=" << ret);
 
 		/* error */
 		if (ret < 0) {
@@ -592,7 +562,7 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 				rc = 0;
 			}
 
-			DBG(IO, ul_debugobj(pty, "leaving poll() loop [timeout=%d, rc=%d]", timeout, rc));
+			DBG(pty << ": leaving poll() loop [timeout=" << timeout << ", rc=" << rc << "]");
 			break;
 		}
 		/* event */
@@ -600,15 +570,15 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 			if (pfd[i].revents == 0)
 				continue;
 
-			DBG(IO, ul_debugobj(pty, " active pfd[%s].fd=%d %s %s %s %s",
-						i == POLLFD_STDIN  ? "stdin" :
-						i == POLLFD_MASTER ? "master" :
-						i == POLLFD_SIGNAL ? "signal" : "???",
-						pfd[i].fd,
-						pfd[i].revents & POLLIN  ? "POLLIN" : "",
-						pfd[i].revents & POLLHUP ? "POLLHUP" : "",
-						pfd[i].revents & POLLERR ? "POLLERR" : "",
-						pfd[i].revents & POLLNVAL ? "POLLNVAL" : ""));
+			// DBG(IO, ul_debugobj(pty, " active pfd[%s].fd=%d %s %s %s %s",
+			// 			i == POLLFD_STDIN  ? "stdin" :
+			// 			i == POLLFD_MASTER ? "master" :
+			// 			i == POLLFD_SIGNAL ? "signal" : "???",
+			// 			pfd[i].fd,
+			// 			pfd[i].revents & POLLIN  ? "POLLIN" : "",
+			// 			pfd[i].revents & POLLHUP ? "POLLHUP" : "",
+			// 			pfd[i].revents & POLLERR ? "POLLERR" : "",
+			// 			pfd[i].revents & POLLNVAL ? "POLLNVAL" : ""));
 
 			if (i == POLLFD_SIGNAL)
 				rc = handle_signal(pty, pfd[i].fd);
@@ -630,11 +600,11 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 			 * POLLNVAL means that fd is closed.
 			 */
 			if ((pfd[i].revents & POLLHUP) || (pfd[i].revents & POLLNVAL) || eof) {
-				DBG(IO, ul_debugobj(pty, " ignore FD"));
+				DBG(pty << ": ignore FD");
 				pfd[i].fd = -1;
 				if (i == POLLFD_STDIN) {
 					ul_pty_write_eof_to_child(pty);
-					DBG(IO, ul_debugobj(pty, "  ignore STDIN"));
+					DBG(pty << ": ignore STDIN");
 				}
 			}
 		}
@@ -650,7 +620,7 @@ int ul_pty_proxy_master(struct ul_pty *pty)
 
 	pty_signals_cleanup(pty);
 
-	DBG(IO, ul_debug("poll() done [signal=%d, rc=%d]", pty->delivered_signal, rc));
+	DBG("poll() done [signal=" << pty->delivered_signal << ", rc=" << rc << "]");
 	return rc;
 }
 
@@ -746,4 +716,3 @@ int main(int argc, char *argv[])
 }
 
 #endif /* TEST_PROGRAM */
-

@@ -14,23 +14,6 @@
 #include "debug.h"
 #include "pty-session.h"
 
-auto constexpr SCRIPT_DEBUG_INIT   = (1 << 1);
-auto constexpr SCRIPT_DEBUG_PTY    = (1 << 2);
-auto constexpr SCRIPT_DEBUG_IO     = (1 << 3);
-auto constexpr SCRIPT_DEBUG_SIGNAL = (1 << 4);
-auto constexpr SCRIPT_DEBUG_MISC   = (1 << 5);
-auto constexpr SCRIPT_DEBUG_ALL    = 0xFFFF;
-
-static UL_DEBUG_DEFINE_MASK(script);
-UL_DEBUG_DEFINE_MASKNAMES(script) = UL_DEBUG_EMPTY_MASKNAMES;
-
-#define DBG(m, x)    __UL_DBG(script, SCRIPT_DEBUG_, m, x)
-#define ON_DBG(m, x) __UL_DBG_CALL(script, SCRIPT_DEBUG_, m, x)
-
-static void script_init_debug(void) {
-	__UL_INIT_DEBUG_FROM_ENV(script, SCRIPT_DEBUG_, 0, SCRIPT_DEBUG);
-}
-
 auto constexpr DEFAULT_TYPESCRIPT_FILENAME = "typescript";
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
@@ -129,9 +112,6 @@ int main(int argc, char **argv)
 	 */
 	setlocale(LC_NUMERIC, "C");
 	close_stdout_atexit();
-
-	script_init_debug();
-	ON_DBG(PTY, ul_pty_init_debug(0xFFFF));
 
 	ctl.isterm = isatty(STDIN_FILENO) == 1;
 
@@ -392,6 +372,6 @@ done:
 			rc = WEXITSTATUS(ctl.childstatus);
 	}
 
-	DBG(MISC, ul_debug("done [rc=%d]", rc));
+	DBG("done [rc="<< rc << "]");
 	return rc;
 }
