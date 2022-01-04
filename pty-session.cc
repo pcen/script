@@ -32,9 +32,9 @@ struct ul_pty *ul_new_pty(int is_stdin_tty) {
 	ul_pty *pty = static_cast<ul_pty*>(calloc(1, sizeof(*pty)));
 
 	if (!pty)
-		return NULL;
+		return nullptr;
 
-	DBG("[" << pty << "]" << " alloc handler");
+	DBG(pty << ": alloc handler");
 	pty->isterm = is_stdin_tty;
 	pty->master = -1;
 	pty->slave = -1;
@@ -118,7 +118,7 @@ static void pty_signals_cleanup(struct ul_pty *pty)
 	pty->sigfd = -1;
 
 	/* restore original setting */
-	sigprocmask(SIG_SETMASK, &pty->orgsig, NULL);
+	sigprocmask(SIG_SETMASK, &pty->orgsig, nullptr);
 }
 
 /* call me before fork() */
@@ -131,7 +131,7 @@ int ul_pty_setup(struct ul_pty *pty)
 	assert(pty->sigfd == -1);
 
 	/* save the current signals setting */
-	sigprocmask(0, NULL, &pty->orgsig);
+	sigprocmask(0, nullptr, &pty->orgsig);
 
 	if (pty->isterm) {
 		DBG(pty << ": create for terminal");
@@ -150,7 +150,7 @@ int ul_pty_setup(struct ul_pty *pty)
 
 		ioctl(STDIN_FILENO, TIOCGWINSZ, (char *)&pty->win);
 		/* create master+slave */
-		rc = openpty(&pty->master, &pty->slave, NULL, &attrs, &pty->win);
+		rc = openpty(&pty->master, &pty->slave, nullptr, &attrs, &pty->win);
 		if (rc)
 			goto done;
 
@@ -160,7 +160,7 @@ int ul_pty_setup(struct ul_pty *pty)
 	} else {
 		DBG(pty << ": create for non-terminal");
 
-		rc = openpty(&pty->master, &pty->slave, NULL, NULL, NULL);
+		rc = openpty(&pty->master, &pty->slave, nullptr, nullptr, nullptr);
 		if (rc)
 			goto done;
 
@@ -175,7 +175,7 @@ int ul_pty_setup(struct ul_pty *pty)
 	}
 
 	sigfillset(&ourset);
-	if (sigprocmask(SIG_BLOCK, &ourset, NULL)) {
+	if (sigprocmask(SIG_BLOCK, &ourset, nullptr)) {
 		rc = -errno;
 		goto done;
 	}
@@ -248,7 +248,7 @@ void ul_pty_init_slave(struct ul_pty *pty)
 	pty->master = -1;
 	pty->sigfd = -1;
 
-	sigprocmask(SIG_SETMASK, &pty->orgsig, NULL);
+	sigprocmask(SIG_SETMASK, &pty->orgsig, nullptr);
 
 	DBG(pty << ": initialize slave done");
 }
@@ -333,10 +333,10 @@ static int handle_io(struct ul_pty *pty, int fd, int *eof)
 
 	sigemptyset(&set);
 	sigaddset(&set, SIGTTIN);
-	sigprocmask(SIG_UNBLOCK, &set, NULL);
+	sigprocmask(SIG_UNBLOCK, &set, nullptr);
 	/* read from active FD */
 	bytes = read(fd, buf, sizeof(buf));
-	sigprocmask(SIG_BLOCK, &set, NULL);
+	sigprocmask(SIG_BLOCK, &set, nullptr);
 	if (bytes < 0) {
 		if (errno == EAGAIN || errno == EINTR)
 			return 0;
@@ -639,13 +639,13 @@ static void child_sigstop(void *data __attribute__((__unused__)), pid_t child)
 int main(int argc, char *argv[])
 {
 	struct ul_pty_callbacks *cb;
-	const char *shell, *command = NULL, *shname = NULL;
+	const char *shell, *command = nullptr, *shname = nullptr;
 	int caught_signal = 0;
 	pid_t child;
 	struct ul_pty *pty;
 
 	shell = getenv("SHELL");
-	if (shell == NULL)
+	if (shell == nullptr)
 		shell = _PATH_BSHELL;
 	if (argc == 2)
 		command = argv[1];
@@ -679,9 +679,9 @@ int main(int argc, char *argv[])
 		shname = shname ? shname + 1 : shell;
 
 		if (command)
-			execl(shell, shname, "-c", command, (char *)NULL);
+			execl(shell, shname, "-c", command, (char *)nullptr);
 		else
-			execl(shell, shname, "-i", (char *)NULL);
+			execl(shell, shname, "-i", (char *)nullptr);
 		err(EXIT_FAILURE, "failed to execute %s", shell);
 		break;
 

@@ -47,7 +47,6 @@
 #include "closestream.h"
 #include "ttyutils.h"
 #include "all-io.h"
-#include "optutils.h"
 #include "signames.h"
 #include "pty-session.h"
 #include "debug.h"

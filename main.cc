@@ -9,7 +9,6 @@
 #include <err.h>
 
 #include "utils.h"
-#include "optutils.h"
 #include "closestream.h"
 #include "debug.h"
 #include "pty-session.h"
@@ -97,11 +96,6 @@ int main(int argc, char **argv)
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
-	static const ul_excl_t excl[] = {       /* rows and cols in ASCII order */
-		{ 'T', 't' },
-		{ 0 }
-	};
-	int excl_st[ARRAY_SIZE(excl)] = UL_EXCL_STATUS_INIT;
 	setlocale(LC_ALL, "");
 	/*
 	 * script -t prints time delays as floating point numbers.  The example
@@ -116,9 +110,6 @@ int main(int argc, char **argv)
 	ctl.isterm = isatty(STDIN_FILENO) == 1;
 
 	while ((ch = getopt_long(argc, argv, "aB:c:eE:fI:O:o:qm:T:t::Vh", longopts, NULL)) != -1) {
-
-		err_exclusive_options(ch, longopts, excl, excl_st);
-
 		switch (ch) {
 		case 'a':
 			ctl.append = true;
