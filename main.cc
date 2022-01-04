@@ -146,16 +146,16 @@ int main(int argc, char **argv)
 			ctl.force = true;
 			break;
 		case 'B':
-			log_associate(&ctl, &ctl.in, optarg, ScriptFormat::Raw);
-			log_associate(&ctl, &ctl.out, optarg, ScriptFormat::Raw);
+			ctl.associate(&ctl.in, optarg, ScriptFormat::Raw);
+			ctl.associate(&ctl.out, optarg, ScriptFormat::Raw);
 			infile = outfile = optarg;
 			break;
 		case 'I':
-			log_associate(&ctl, &ctl.in, optarg, ScriptFormat::Raw);
+			ctl.associate(&ctl.in, optarg, ScriptFormat::Raw);
 			infile = optarg;
 			break;
 		case 'O':
-			log_associate(&ctl, &ctl.out, optarg, ScriptFormat::Raw);
+			ctl.associate(&ctl.out, optarg, ScriptFormat::Raw);
 			outfile = optarg;
 			break;
 		case 'o':
@@ -204,7 +204,7 @@ int main(int argc, char **argv)
 		}
 
 		// associate stdout with typescript file
-		log_associate(&ctl, &ctl.out, outfile, ScriptFormat::Raw);
+		ctl.associate(&ctl.out, outfile, ScriptFormat::Raw);
 	}
 
 	if (timingfile) {
@@ -219,10 +219,10 @@ int main(int argc, char **argv)
 			errx(EXIT_FAILURE, "log multiple streams is mutually exclusive with 'classic' format");
 		}
 		if (outfile) {
-			log_associate(&ctl, &ctl.out, timingfile, format);
+			ctl.associate(&ctl.out, timingfile, format);
 		}
 		if (infile) {
-			log_associate(&ctl, &ctl.in, timingfile, format);
+			ctl.associate(&ctl.in, timingfile, format);
 		}
 	}
 
@@ -315,7 +315,7 @@ int main(int argc, char **argv)
 		log_info(&ctl, "START_TIME", "%s", buf);
 
 		if (ctl.isterm) {
-			init_terminal_info(&ctl);
+			ctl.initTerminalInfo();
 			log_info(&ctl, "TERM", "%s", ctl.ttytype);
 			log_info(&ctl, "TTY", "%s", ctl.ttyname);
 			log_info(&ctl, "COLUMNS", "%d", ctl.ttycols);

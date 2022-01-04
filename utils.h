@@ -1,9 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <string.h>
-#include <time.h>
-
+#include <cstring>
+#include <ctime>
 #include <chrono>
 
 #define ARRAY_SIZE(arr) ((sizeof(arr) / sizeof(*(arr))) / static_cast<size_t>(!(sizeof(arr) % sizeof(*(arr)))))
@@ -23,11 +22,8 @@
 #endif
 
 inline int xusleep(useconds_t usec) {
-	struct timespec waittime = {
-		.tv_sec   =  usec / 1000000L,
-		.tv_nsec  = (usec % 1000000L) * 1000
-	};
-	return nanosleep(&waittime, NULL);
+	timespec waittime{usec / 1000000L, (usec % 1000000L) * 1000};
+	return nanosleep(&waittime, nullptr);
 }
 
 inline const char* startswith(const char *s, const char *prefix) {

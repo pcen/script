@@ -37,29 +37,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
-#include <paths.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <termios.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <signal.h>
-#include <errno.h>
-#include <string.h>
 #include <getopt.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <locale.h>
-#include <stddef.h>
-#include <sys/wait.h>
-#include <poll.h>
-#include <sys/signalfd.h>
-#include <inttypes.h>
 #include <err.h>
 
-#include <string>
-#include <vector>
 #include <ctime>
 #include <cassert>
 
@@ -74,69 +54,66 @@
 
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
-/*
- * Script is driven by stream (stdout/stdin) activity. It's possible to
- * associate arbitrary number of log files with the stream. We have two basic
- * types of log files: "timing file" (simple or multistream) and "data file"
- * (raw).
- *
- * The same log file maybe be shared between both streams. For example
- * multi-stream timing file is possible to use for stdin as well as for stdout.
- */
+ScriptControl::ScriptControl()
+	: outsz{ 0 },
+	maxsz{ 0 },
+	siglog{ nullptr },
+	infolog{ nullptr },
+	ttyname{ nullptr },
+	ttytype{ nullptr },
+	ttycols{ 0 },
+	ttylines{ 0 },
+	pty{ nullptr },
+	childstatus{ 0 },
+	append{ false },
+	rc_wanted{ false },
+	flush{ false },
+	quiet{ false },
+	force{ false },
+	isterm{ false } {}
 
-void init_terminal_info(ScriptControl *ctl) {
-	if (ctl->ttyname || !ctl->isterm)
-		return; // already initialized
-
-	get_terminal_dimension(&ctl->ttycols, &ctl->ttylines);
-	get_terminal_name(&ctl->ttyname, NULL, NULL);
-	get_terminal_type(&ctl->ttytype);
+void ScriptControl::initTerminalInfo() {
+	if (ttyname || !isterm) {
+		return;
+	}
+	get_terminal_dimension(&ttycols, &ttylines);
+	get_terminal_name(&ttyname, nullptr, nullptr);
+	get_terminal_type(&ttytype);
 }
 
-ScriptLog *get_log_by_name(ScriptStream *stream, const std::string& name)
-{
-	size_t i;
+ScriptStream::ScriptStream(char ident) : ident{ ident } {}
 
-	for (i = 0; i < stream->nlogs; i++) {
-		ScriptLog* log = stream->logs[i];
-		if (log->filename == name) {
-			return log;
-		}
+ScriptLog* ScriptStream::getLogByName(const std::string& name) {
+	for (auto log : logs) {
+		if (log->filename == name) return log;
 	}
 	return nullptr;
 }
 
-ScriptLog *log_associate(ScriptControl *ctl, ScriptStream *stream, const std::string& filename, ScriptFormat format) {
-	ScriptLog *log;
-
+ScriptLog* ScriptControl::associate(ScriptStream* stream, const std::string& filename, ScriptFormat format) {
 	DBG("associate" << filename << " with stream");
 
-	assert(ctl);
 	assert(stream);
 
-	log = get_log_by_name(stream, filename);
-	if (log)
-		return log;	/* already defined */
+	ScriptLog* log = stream->getLogByName(filename);
+	if (log) return log;
 
-	log = get_log_by_name(stream == &ctl->out ? &ctl->in : &ctl->out, filename);
+	log = stream == &out ? in.getLogByName(filename) : out.getLogByName(filename);
 	if (!log) {
-		// create a new log
 		log = new ScriptLog();
 		log->filename = filename;
 		log->format = format;
 	}
 
-	// add log to the stream
 	stream->logs.push_back(log);
-	stream->nlogs++;
 
 	// remember where to write info about signals
 	if (format == ScriptFormat::TimingMulti) {
-		if (!ctl->siglog) {
-			ctl->siglog = log;
+		if (!siglog) {
+			siglog = log;
 		}
-		if (!ctl->infolog) {
-			ctl->infolog = log;
+		if (!infolog) {
+			infolog = log;
 		}
 	}
 
@@ -207,19 +184,16 @@ static void log_free(ScriptControl *ctl, ScriptLog *log) {
 	if (!log)
 		return;
 
-	/* the same log is possible to reference from more places, remove all
-	 * (TODO: maybe use include/list.h to make it more elegant)
-	 */
 	if (ctl->siglog == log)
 		ctl->siglog = nullptr;
 	else if (ctl->infolog == log)
 		ctl->infolog = nullptr;
 
-	for (i = 0; i < ctl->out.nlogs; i++) {
+	for (i = 0; i < ctl->out.logs.size(); i++) {
 		if (ctl->out.logs[i] == log)
 			ctl->out.logs[i] = nullptr;
 	}
-	for (i = 0; i < ctl->in.nlogs; i++) {
+	for (i = 0; i < ctl->in.logs.size(); i++) {
 		if (ctl->in.logs[i] == log)
 			ctl->in.logs[i] = nullptr;
 	}
@@ -255,7 +229,7 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 		fprintf(log->fp, "Script started on %s [", buf);
 
 		if (ctl->isterm) {
-			init_terminal_info(ctl);
+			ctl->initTerminalInfo();
 
 			if (ctl->ttytype)
 				fprintf(log->fp, "TERM=\"%s\" ", ctl->ttytype);
@@ -281,18 +255,16 @@ static int log_start(ScriptControl *ctl, ScriptLog *log) {
 }
 
 int logging_start(ScriptControl *ctl) {
-	size_t i;
-
 	/* start all output logs */
-	for (i = 0; i < ctl->out.nlogs; i++) {
-		int rc = log_start(ctl, ctl->out.logs[i]);
+	for (auto log : ctl->out.logs) {
+		int rc = log_start(ctl, log);
 		if (rc)
 			return rc;
 	}
 
 	/* start all input logs */
-	for (i = 0; i < ctl->in.nlogs; i++) {
-		int rc = log_start(ctl, ctl->in.logs[i]);
+	for (auto log : ctl->in.logs) {
+		int rc = log_start(ctl, log);
 		if (rc)
 			return rc;
 	}
@@ -356,22 +328,15 @@ ssize_t log_write(ScriptControl *ctl, ScriptStream *stream, ScriptLog *log, char
 	return ssz;
 }
 
-static ssize_t log_stream_activity(
-			ScriptControl *ctl,
-			ScriptStream *stream,
-			char *buf, size_t bytes)
-{
-	size_t i;
+ssize_t log_stream_activity(ScriptControl* ctl, ScriptStream* stream, char* buf, size_t bytes) {
 	ssize_t outsz = 0;
-
-	for (i = 0; i < stream->nlogs; i++) {
-		ssize_t ssz = log_write(ctl, stream, stream->logs[i], buf, bytes);
+	for (auto log : stream->logs) {
+		ssize_t ssz = log_write(ctl, stream, log, buf, bytes);
 
 		if (ssz < 0)
 			return ssz;
 		outsz += ssz;
 	}
-
 	return outsz;
 }
 
@@ -463,8 +428,7 @@ void logging_done(ScriptControl *ctl, const char *msg) {
 	DBG(" status=" << status);
 
 	/* close all output logs */
-	for (i = 0; i < ctl->out.nlogs; i++) {
-		ScriptLog *log = ctl->out.logs[i];
+	for (auto log : ctl->out.logs) {
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
@@ -472,11 +436,9 @@ void logging_done(ScriptControl *ctl, const char *msg) {
 		delete log;
 	}
 	ctl->out.logs.clear();
-	ctl->out.nlogs = 0;
 
 	/* close all input logs */
-	for (i = 0; i < ctl->in.nlogs; i++) {
-		ScriptLog *log = ctl->in.logs[i];
+	for (auto log : ctl->in.logs) {
 		log_close(ctl, log, msg, status);
 		log_free(ctl, log);
 	}
@@ -484,7 +446,6 @@ void logging_done(ScriptControl *ctl, const char *msg) {
 		delete log;
 	}
 	ctl->in.logs.clear();
-	ctl->in.nlogs = 0;
 }
 
 void callback_child_die(void* data, pid_t child, int status) {
@@ -563,14 +524,14 @@ int callback_flush_logs(void* data) {
 	ScriptControl* ctl = (ScriptControl *) data;
 	size_t i;
 
-	for (i = 0; i < ctl->out.nlogs; i++) {
-		int rc = log_flush(ctl, ctl->out.logs[i]);
+	for (auto log : ctl->out.logs) {
+		int rc = log_flush(ctl, log);
 		if (rc)
 			return rc;
 	}
 
-	for (i = 0; i < ctl->in.nlogs; i++) {
-		int rc = log_flush(ctl, ctl->in.logs[i]);
+	for (auto log : ctl->in.logs) {
+		int rc = log_flush(ctl, log);
 		if (rc)
 			return rc;
 	}
