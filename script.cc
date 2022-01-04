@@ -59,7 +59,6 @@
 #include <ctime>
 
 #include "closestream.h"
-#include "nls.h"
 #include "c.h"
 #include "ttyutils.h"
 #include "all-io.h"
@@ -214,30 +213,30 @@ static void __attribute__((__noreturn__)) usage(void)
 {
 	FILE *out = stdout;
 	fputs(USAGE_HEADER, out);
-	fprintf(out, _(" %s [options] [file]\n"), program_invocation_short_name);
+	fprintf(out, " %s [options] [file]\n", program_invocation_short_name);
 
 	fputs(USAGE_SEPARATOR, out);
-	fputs(_("Make a typescript of a terminal session.\n"), out);
+	fputs("Make a typescript of a terminal session.\n", out);
 
 	fputs(USAGE_OPTIONS, out);
-	fputs(_(" -I, --log-in <file>           log stdin to file\n"), out);
-	fputs(_(" -O, --log-out <file>          log stdout to file (default)\n"), out);
-	fputs(_(" -B, --log-io <file>           log stdin and stdout to file\n"), out);
+	fputs(" -I, --log-in <file>           log stdin to file\n", out);
+	fputs(" -O, --log-out <file>          log stdout to file (default)\n", out);
+	fputs(" -B, --log-io <file>           log stdin and stdout to file\n", out);
 	fputs(USAGE_SEPARATOR, out);
 
-	fputs(_(" -T, --log-timing <file>       log timing information to file\n"), out);
-	fputs(_(" -t[<file>], --timing[=<file>] deprecated alias to -T (default file is stderr)\n"), out);
-	fputs(_(" -m, --logging-format <name>   force to 'classic' or 'advanced' format\n"), out);
+	fputs(" -T, --log-timing <file>       log timing information to file\n", out);
+	fputs(" -t[<file>], --timing[=<file>] deprecated alias to -T (default file is stderr)\n", out);
+	fputs(" -m, --logging-format <name>   force to 'classic' or 'advanced' format\n", out);
 	fputs(USAGE_SEPARATOR, out);
 
-	fputs(_(" -a, --append                  append to the log file\n"), out);
-	fputs(_(" -c, --command <command>       run command rather than interactive shell\n"), out);
-	fputs(_(" -e, --return                  return exit code of the child process\n"), out);
-	fputs(_(" -f, --flush                   run flush after each write\n"), out);
-	fputs(_("     --force                   use output file even when it is a link\n"), out);
-	fputs(_(" -E, --echo <when>             echo input in session (auto, always or never)\n"), out);
-	fputs(_(" -o, --output-limit <size>     terminate if output files exceed size\n"), out);
-	fputs(_(" -q, --quiet                   be quiet\n"), out);
+	fputs(" -a, --append                  append to the log file\n", out);
+	fputs(" -c, --command <command>       run command rather than interactive shell\n", out);
+	fputs(" -e, --return                  return exit code of the child process\n", out);
+	fputs(" -f, --flush                   run flush after each write\n", out);
+	fputs("     --force                   use output file even when it is a link\n", out);
+	fputs(" -E, --echo <when>             echo input in session (auto, always or never)\n", out);
+	fputs(" -o, --output-limit <size>     terminate if output files exceed size\n", out);
+	fputs(" -q, --quiet                   be quiet\n", out);
 
 	fputs(USAGE_SEPARATOR, out);
 	printf(USAGE_HELP_OPTIONS(31));
@@ -320,9 +319,9 @@ static int log_close(ScriptControl *ctl,
 
 		// strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
 		if (msg)
-			fprintf(log->fp, _("\nScript done on %s [<%s>]\n"), buf, msg);
+			fprintf(log->fp, "\nScript done on %s [<%s>]\n", buf, msg);
 		else
-			fprintf(log->fp, _("\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n"), buf, status);
+			fprintf(log->fp, "\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n", buf, status);
 		break;
 	}
 	case ScriptFormat::TimingMulti:
@@ -343,7 +342,7 @@ static int log_close(ScriptControl *ctl,
 	}
 
 	if (close_stream(log->fp) != 0) {
-		warn(_("write failed: %s"), log->filename);
+		warn("write failed: %s", log->filename);
 		rc = -errno;
 	}
 
@@ -407,7 +406,7 @@ static int log_start(ScriptControl *ctl,
 			"a" UL_CLOEXECSTR :
 			"w" UL_CLOEXECSTR);
 	if (!log->fp) {
-		warn(_("cannot open %s"), log->filename);
+		warn("cannot open %s", log->filename);
 		return -errno;
 	}
 
@@ -420,7 +419,7 @@ static int log_start(ScriptControl *ctl,
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
 		// strtime_iso(&tvec, ISO_TIMESTAMP, buf, sizeof(buf));
-		fprintf(log->fp, _("Script started on %s ["), buf);
+		fprintf(log->fp, "Script started on %s [", buf);
 
 		if (ctl->isterm) {
 			init_terminal_info(ctl);
@@ -432,7 +431,7 @@ static int log_start(ScriptControl *ctl,
 
 			fprintf(log->fp, "COLUMNS=\"%d\" LINES=\"%d\"", ctl->ttycols, ctl->ttylines);
 		} else
-			fprintf(log->fp, _("<not executed on terminal>"));
+			fprintf(log->fp, "<not executed on terminal>");
 
 		fputs("]\n", log->fp);
 		break;
@@ -490,7 +489,7 @@ static ssize_t log_write(ScriptControl *ctl,
 
 		rc = fwrite_all(obuf, 1, bytes, log->fp);
 		if (rc) {
-			warn(_("cannot write %s"), log->filename);
+			warn("cannot write %s", log->filename);
 			return rc;
 		}
 		ssz = bytes;
@@ -709,9 +708,9 @@ static int callback_log_stream_activity(void *data, int fd, char *buf, size_t bu
 	/* check output limit */
 	if (ctl->maxsz != 0 && ctl->outsz >= ctl->maxsz) {
 		if (!ctl->quiet)
-			printf(_("Script terminated, max output files size %lu exceeded.\n"), ctl->maxsz);
+			printf("Script terminated, max output files size %lu exceeded.\n", ctl->maxsz);
 		DBG(IO, ul_debug("output size %lu, exceeded limit %lu", ctl->outsz, ctl->maxsz));
-		logging_done(ctl, _("max output size exceeded"));
+		logging_done(ctl, "max output size exceeded");
 		return 1;
 	}
 	return 0;
@@ -772,9 +771,9 @@ static void die_if_link(ScriptControl *ctl, const char *filename)
 		return;
 	if (lstat(filename, &s) == 0 && (S_ISLNK(s.st_mode) || s.st_nlink > 1))
 		errx(EXIT_FAILURE,
-		     _("output file `%s' is a link\n"
+		       "output file `%s' is a link\n"
 		       "Use --force if you really want to use it.\n"
-		       "Program not started."), filename);
+		       "Program not started.", filename);
 }
 
 int main(int argc, char **argv)
@@ -824,8 +823,6 @@ int main(int argc, char **argv)
 	 * for human consumption, it seems easiest to set LC_NUMERIC here.
 	 */
 	setlocale(LC_NUMERIC, "C");
-	bindtextdomain(PACKAGE, LOCALEDIR);
-	textdomain(PACKAGE);
 	close_stdout_atexit();
 
 	script_init_debug();
@@ -852,7 +849,7 @@ int main(int argc, char **argv)
 			else if (strcmp(optarg, "always") == 0)
 				echo = 1;
 			else
-				errx(EXIT_FAILURE, _("unssuported echo mode: '%s'"), optarg);
+				errx(EXIT_FAILURE, "unssuported echo mode: '%s'", optarg);
 			break;
 		case 'e':
 			ctl.rc_wanted = true;
@@ -888,7 +885,7 @@ int main(int argc, char **argv)
 			else if (strcasecmp(optarg, "advanced") == 0)
 				format = ScriptFormat::TimingMulti;
 			else
-				errx(EXIT_FAILURE, _("unsupported logging format: '%s'"), optarg);
+				errx(EXIT_FAILURE, "unsupported logging format: '%s'", optarg);
 			break;
 		case 't':
 			if (optarg && *optarg == '=')
@@ -899,7 +896,8 @@ int main(int argc, char **argv)
 			timingfile = optarg;
 			break;
 		case 'V':
-			print_version(EXIT_SUCCESS);
+			printf("version 0.0.0\n");
+			exit(EXIT_SUCCESS);
 		case 'h':
 			usage();
 		default:
@@ -931,7 +929,7 @@ int main(int argc, char **argv)
 			         ScriptFormat::TimingMulti :
 			         ScriptFormat::TimingSimple;
 		} else if (format == ScriptFormat::TimingSimple && outfile && infile) {
-			errx(EXIT_FAILURE, _("log multiple streams is mutually exclusive with 'classic' format"));
+			errx(EXIT_FAILURE, "log multiple streams is mutually exclusive with 'classic' format");
 		}
 		if (outfile) {
 			log_associate(&ctl, &ctl.out, timingfile, format);
@@ -960,14 +958,14 @@ int main(int argc, char **argv)
 	cb->flush_logs = callback_flush_logs;
 
 	if (!ctl.quiet) {
-		printf(_("Script started"));
+		printf("Script started");
 		if (outfile)
-			printf(_(", output log file is '%s'"), outfile);
+			printf(", output log file is '%s'", outfile);
 		if (infile)
-			printf(_(", input log file is '%s'"), infile);
+			printf(", input log file is '%s'", infile);
 		if (timingfile)
-			printf(_(", timing file is '%s'"), timingfile);
-		printf(_(".\n"));
+			printf(", timing file is '%s'", timingfile);
+		printf(".\n");
 	}
 
 #ifdef HAVE_LIBUTEMPTER
@@ -975,7 +973,7 @@ int main(int argc, char **argv)
 #endif
 
 	if (ul_pty_setup(ctl.pty))
-		err(EXIT_FAILURE, _("failed to create pseudo-terminal"));
+		err(EXIT_FAILURE, "failed to create pseudo-terminal");
 
 	fflush(stdout);
 
@@ -985,7 +983,7 @@ int main(int argc, char **argv)
 
 	switch ((int) (ctl.child = fork())) {
 	case -1: /* error */
-		warn(_("cannot create child process"));
+		warn("cannot create child process");
 		rc = -errno;
 		goto done;
 
@@ -1074,7 +1072,7 @@ done:
 	logging_done(&ctl, NULL);
 
 	if (!ctl.quiet)
-		printf(_("Script done.\n"));
+		printf("Script done.\n");
 
 #ifdef HAVE_LIBUTEMPTER
 	if (ul_pty_get_childfd(ctl.pty) >= 0)

@@ -4,7 +4,6 @@
 #include <assert.h>
 
 #include "c.h"
-#include "nls.h"
 #include "cctype.h"
 
 static inline const char *option_to_longopt(int c, const struct option *opts)
@@ -82,13 +81,11 @@ static inline void err_exclusive_options(
 			else if (status[e] != c) {
 				size_t ct = 0;
 
-				fprintf(stderr, _("%s: mutually exclusive "
-						  "arguments:"),
+				fprintf(stderr, "%s: mutually exclusive "
+						  "arguments:",
 						program_invocation_short_name);
 
-				for (op = excl[e];
-				     ct + 1 < ARRAY_SIZE(excl[0]) && *op;
-				     op++, ct++) {
+				for (op = excl[e]; ct + 1 < ARRAY_SIZE(excl[0]) && *op; op++, ct++) {
 					const char *n = option_to_longopt(*op, opts);
 					if (n)
 						fprintf(stderr, " --%s", n);
@@ -103,5 +100,4 @@ static inline void err_exclusive_options(
 	}
 }
 
-#endif
-
+#endif // UTIL_LINUX_OPTUTILS_H
