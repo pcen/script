@@ -7,7 +7,7 @@ LDFLAGS = -lutil
 OBJ = main.o script.o ttyutils.o signames.o pty-session.o
 DEPENDS = $(OBJ:.o=.d) # substitute ".o" with ".d"
 
-.PHONY: clean
+.PHONY: clean clean-ts
 
 script: $(OBJ)
 	$(CXX) $(OBJ) -o script $(LDFLAGS) $(CXXFLAGS)
@@ -19,3 +19,6 @@ script: $(OBJ)
 
 clean:
 	rm -f *.o *.d *.txt script typescript
+
+clean-ts:
+	rm -f *.txt typescript

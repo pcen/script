@@ -104,7 +104,7 @@ std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCoun
 				break;
 
 			case 'V': // version
-				printf("version 0.0.0\n");
+				std::cout << "version 0.0.0" << std::endl;
 				exit(EXIT_SUCCESS);
 			case 'h': // usage
 				usage();
@@ -122,7 +122,6 @@ std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCoun
 			case 'T': // timing file
 				if (i < argc - 1) {
 					valArgs[c] = std::string(argv[++i]);
-					std::cout << valArgs[c] << std::endl;
 					argCount++;
 				} else {
 					std::cerr << "missing value for option \"" << argv[i] << "\"" << std::endl;
@@ -165,7 +164,6 @@ int main(int argc, char* argv[]) {
 	int argCount = 1;
 	std::unordered_map<char, std::string> argVals = parseArgs(ctl, argCount, argc, argv);
 	for (auto [k, v] : argVals) {
-		std::cout << k << ": " << v << std::endl;
 		switch (k) {
 			case 'E': // echo
 				if (v == "auto") {
@@ -254,7 +252,7 @@ int main(int argc, char* argv[]) {
 	ul_pty_slave_echo(ctl.pty, echo);
 
 	if (!ctl.quiet) {
-		printf("Script started");
+		std::cout << "Script started";
 		if (!outfile.empty())
 			std::cout << ", output log file is '" << outfile << "'";
 		if (!infile.empty())
@@ -351,11 +349,11 @@ int main(int argc, char* argv[]) {
 		ul_pty_wait_for_child(ctl.pty); // final wait
 
 	if (caught_signal && ctl.child != (pid_t)-1) {
-		fprintf(stderr, "\nSession terminated, killing shell...");
+		std::cerr << "\nSession terminated, killing shell...";
 		kill(ctl.child, SIGTERM);
 		sleep(2);
 		kill(ctl.child, SIGKILL);
-		fprintf(stderr, " ...killed.\n");
+		std::cerr << " ...killed.\n";
 	}
 
 done:
@@ -363,7 +361,7 @@ done:
 	ctl.loggingDone(nullptr);
 
 	if (!ctl.quiet)
-		printf("Script done.\n");
+		std::cout << "Script done." << std::endl;
 
 	delete ctl.pty;
 
