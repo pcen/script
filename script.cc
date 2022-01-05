@@ -36,7 +36,6 @@
 
 #include <stdlib.h>
 #include <stdarg.h>
-#include <getopt.h>
 #include <err.h>
 
 #include <cstdio>
@@ -52,7 +51,8 @@
 
 auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be unicode
 
-ScriptLog::ScriptLog() : fp{ nullptr }, initialized{ false } {}
+ScriptLog::ScriptLog(const std::string& filename, ScriptFormat format)
+	: fp{ nullptr }, format{ format }, filename{ filename }, initialized{ false } {}
 
 int ScriptLog::flush() {
 	if (!initialized) {
@@ -61,14 +61,6 @@ int ScriptLog::flush() {
 	DBG("flushing " << filename);
 
 	return fflush(fp); // 0 on success
-}
-
-int ScriptLog::write(const char* fmt, ...) {
-	va_list ap;
-	va_start(ap, fmt);
-	int rc = std::vfprintf(fp, fmt, ap);
-	va_end(ap);
-	return rc;
 }
 
 ScriptControl::ScriptControl()
@@ -115,13 +107,13 @@ ScriptLog* ScriptControl::associate(ScriptStream& stream, const std::string& fil
 	DBG("associate" << filename << " with stream");
 
 	ScriptLog* log = stream.getLogByName(filename);
-	if (log) return log;
+	if (log) {
+		return log;
+	}
 
 	log = stream == out ? in.getLogByName(filename) : out.getLogByName(filename);
 	if (!log) {
-		log = new ScriptLog();
-		log->filename = filename;
-		log->format = format;
+		log = new ScriptLog(filename, format);
 	}
 
 	stream.logs.push_back(log);
