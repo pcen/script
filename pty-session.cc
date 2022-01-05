@@ -145,8 +145,7 @@ int ul_pty_setup(Pty *pty) {
 	sigaddset(&ourset, SIGINT);
 	sigaddset(&ourset, SIGQUIT);
 
-	if (pty->callback.ptyFlushLogs())
-		sigaddset(&ourset, SIGUSR1);
+	sigaddset(&ourset, SIGUSR1);
 
 	if ((pty->sigfd = signalfd(-1, &ourset, SFD_CLOEXEC)) < 0)
 		rc = -errno;
