@@ -73,7 +73,6 @@ const std::unordered_map<std::string, char> optNames = {
 std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCount, int argc, char *argv[]) {
 	int i = 1;
 	char c;
-	std::string value;
 	std::unordered_map<char, std::string> valArgs;
 	while (i < argc) {
 		if (argv[i][0] == '-' && std::strlen(argv[i]) == 2) {
@@ -98,7 +97,7 @@ std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCoun
 				ctl.flush = true;
 				break;
 			case 'o': // max output size
-				ctl.maxsz = std::stoul(value);
+				ctl.maxsz = std::stoul(std::string(argv[++i]));
 				break;
 			case 'q': // quiet mode
 				ctl.quiet = true;
@@ -123,6 +122,7 @@ std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCoun
 			case 'T': // timing file
 				if (i < argc - 1) {
 					valArgs[c] = std::string(argv[++i]);
+					std::cout << valArgs[c] << std::endl;
 					argCount++;
 				} else {
 					std::cerr << "missing value for option \"" << argv[i] << "\"" << std::endl;
@@ -146,8 +146,8 @@ int main(int argc, char* argv[]) {
 
 	ScriptFormat format = ScriptFormat::Invalid;
 	int ch, caught_signal = 0, rc = 0, echo = 1;
-	const char *outfile = nullptr, *infile = nullptr, *errfile = nullptr;
-	const char *timingfile = nullptr, *shell = nullptr, *command = nullptr;
+	std::string outfile, infile, errfile, timingfile;
+	const char *shell = nullptr, *command = nullptr;
 
 	setlocale(LC_ALL, "");
 	/*
@@ -165,6 +165,7 @@ int main(int argc, char* argv[]) {
 	int argCount = 1;
 	std::unordered_map<char, std::string> argVals = parseArgs(ctl, argCount, argc, argv);
 	for (auto [k, v] : argVals) {
+		std::cout << k << ": " << v << std::endl;
 		switch (k) {
 			case 'E': // echo
 				if (v == "auto") {
@@ -180,15 +181,15 @@ int main(int argc, char* argv[]) {
 			case 'B': // both input and output
 				ctl.associate(ctl.in, v, ScriptFormat::Raw);
 				ctl.associate(ctl.out, v, ScriptFormat::Raw);
-				infile = outfile = v.c_str();
+				infile = outfile = v;
 				break;
 			case 'I': // input
 				ctl.associate(ctl.in, v, ScriptFormat::Raw);
-				infile = v.c_str();
+				infile = v;
 				break;
 			case 'O': // output
 				ctl.associate(ctl.out, v, ScriptFormat::Raw);
-				outfile = v.c_str();
+				outfile = v;
 				break;
 			case 'm': // log format
 				if (v == "classic") {
@@ -201,7 +202,7 @@ int main(int argc, char* argv[]) {
 				}
 				break;
 			case 'T': // timing file
-				timingfile = v.c_str();
+				timingfile = v;
 				break;
 		}
 	}
@@ -209,7 +210,7 @@ int main(int argc, char* argv[]) {
 	argv += argCount;
 
 	// default if no --log-* specified
-	if (!outfile && !infile) {
+	if (outfile.empty() && infile.empty()) {
 		if (argc > 0) {
 			outfile = argv[0];
 		} else {
@@ -221,21 +222,21 @@ int main(int argc, char* argv[]) {
 		ctl.associate(ctl.out, outfile, ScriptFormat::Raw);
 	}
 
-	if (timingfile) {
+	if (!timingfile.empty()) {
 		/* the old SCRIPT_FMT_TIMING_SIMPLE should be used when
 		 * recoding output only (just for backward compatibility),
 		 * otherwise switch to new format. */
 		if (format == ScriptFormat::Invalid) {
-			format = infile || (outfile && infile) ?
+			format = !infile.empty() || (!outfile.empty() && !infile.empty()) ?
 			         ScriptFormat::TimingMulti :
 			         ScriptFormat::TimingSimple;
-		} else if (format == ScriptFormat::TimingSimple && outfile && infile) {
+		} else if (format == ScriptFormat::TimingSimple && !outfile.empty() && !infile.empty()) {
 			errx(EXIT_FAILURE, "log multiple streams is mutually exclusive with 'classic' format");
 		}
-		if (outfile) {
+		if (!outfile.empty()) {
 			ctl.associate(ctl.out, timingfile, format);
 		}
-		if (infile) {
+		if (!infile.empty()) {
 			ctl.associate(ctl.in, timingfile, format);
 		}
 	}
@@ -254,13 +255,13 @@ int main(int argc, char* argv[]) {
 
 	if (!ctl.quiet) {
 		printf("Script started");
-		if (outfile)
-			printf(", output log file is '%s'", outfile);
-		if (infile)
-			printf(", input log file is '%s'", infile);
-		if (timingfile)
-			printf(", timing file is '%s'", timingfile);
-		printf(".\n");
+		if (!outfile.empty())
+			std::cout << ", output log file is '" << outfile << "'";
+		if (!infile.empty())
+			std::cout << ", input log file is '" << infile << "'";
+		if (!timingfile.empty())
+			std::cout << ", timing file is '" << timingfile << "'";
+		std::cout << std::endl;
 	}
 
 	if (ul_pty_setup(ctl.pty))
@@ -313,7 +314,7 @@ int main(int argc, char* argv[]) {
 		goto done;
 
 	// add extra info to advanced timing file
-	if (timingfile && format == ScriptFormat::TimingMulti) {
+	if (!timingfile.empty() && format == ScriptFormat::TimingMulti) {
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
@@ -332,10 +333,10 @@ int main(int argc, char* argv[]) {
 			ctl.logInfo("COMMAND", "%s", command);
 		}
 		ctl.logInfo("TIMING_LOG", "%s", timingfile);
-		if (outfile) {
+		if (!outfile.empty()) {
 			ctl.logInfo("OUTPUT_LOG", "%s", outfile);
 		}
-		if (infile) {
+		if (!infile.empty()) {
 			ctl.logInfo("INPUT_LOG", "%s", infile);
 		}
 	}
