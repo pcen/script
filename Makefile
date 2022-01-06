@@ -1,7 +1,7 @@
 DEBUG=NODEBUG
 
 CXX = g++
-CXXFLAGS = -std=c++17 -include config.h -g -D$(DEBUG) -MMD
+CXXFLAGS = -std=c++17 -g -D$(DEBUG) -MMD
 LDFLAGS = -lutil
 
 OBJ = main.o script.o ttyutils.o signames.o pty-session.o

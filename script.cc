@@ -216,10 +216,9 @@ int ScriptControl::closeLog(ScriptLog *log, const char *msg, int status) {
 	}
 	case ScriptFormat::TimingMulti:
 	{
-		struct timeval now = { 0 }, delta = { 0 };
 		std::stringstream ss;
-
-		gettime_monotonic(&now);
+		timeval delta = { 0, 0 };
+		timeval now = getMonotonicTime();
 		timersub(&now, &log->starttime, &delta);
 
 		ss << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec;
@@ -305,8 +304,8 @@ int ScriptControl::startLog(ScriptLog *log) {
 	}
 	case ScriptFormat::TimingSimple:
 	case ScriptFormat::TimingMulti:
-		gettime_monotonic(&log->oldtime);
-		gettime_monotonic(&log->starttime);
+		log->oldtime = getMonotonicTime();
+		log->starttime = getMonotonicTime();
 		break;
 	}
 
@@ -336,7 +335,7 @@ int ScriptControl::loggingStart() {
 ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf, size_t bytes) {
 	int rc;
 	ssize_t ssz = 0;
-	struct timeval now, delta;
+	timeval now, delta;
 
 	if (!log->fp) {
 		return 0;
@@ -361,7 +360,7 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 	case ScriptFormat::TimingSimple:
 		DBG("  log timing info");
 
-		gettime_monotonic(&now);
+		now = getMonotonicTime();
 		timersub(&now, &log->oldtime, &delta);
 		ss << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec << " " << bytes << "\n";
 		ssz = log->write(ss.str());
@@ -371,7 +370,7 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 	case ScriptFormat::TimingMulti:
 		DBG("  log multi-stream timing info");
 
-		gettime_monotonic(&now);
+		now = getMonotonicTime();
 		timersub(&now, &log->oldtime, &delta);
 		ss << stream.ident << " " << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec << " " << bytes << "\n";
 		ssz = log->write(ss.str());
@@ -403,7 +402,7 @@ ssize_t ScriptControl::logStreamActivity(ScriptStream& stream, char* buf, size_t
 
 // logSignal writes a message to the siglog
 ssize_t ScriptControl::logSignal(int signum, const char* msgfmt, ...) {
-	struct timeval now, delta;
+	timeval delta;
 	char msg[BUFSIZ] = {0};
 	va_list ap;
 	ssize_t sz;
@@ -416,7 +415,7 @@ ssize_t ScriptControl::logSignal(int signum, const char* msgfmt, ...) {
 	assert(log->format == ScriptFormat::TimingMulti);
 	DBG("  writing signal to multi-stream timing");
 
-	gettime_monotonic(&now);
+	timeval now = getMonotonicTime();
 	timersub(&now, &log->oldtime, &delta);
 
 	if (msgfmt) {

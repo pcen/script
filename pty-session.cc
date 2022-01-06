@@ -462,10 +462,9 @@ int ul_pty_proxy_master(Pty *pty) {
 
 		/* note, callback usually updates @next_callback_time */
 		if (timerisset(&pty->next_callback_time)) {
-			struct timeval now;
+			timeval now = getMonotonicTime();
 
 			DBG(pty << ": callback requested");
-			gettime_monotonic(&now);
 			if (timercmp(&now, &pty->next_callback_time, >)) {
 				rc = mainloop_callback(pty);
 				if (rc)
@@ -475,9 +474,8 @@ int ul_pty_proxy_master(Pty *pty) {
 
 		/* set timeout */
 		if (timerisset(&pty->next_callback_time)) {
-			struct timeval now, rest;
-
-			gettime_monotonic(&now);
+			timeval rest;
+			timeval now = getMonotonicTime();
 			timersub(&pty->next_callback_time, &now, &rest);
 			timeout = (rest.tv_sec * 1000) +  (rest.tv_usec / 1000);
 		} else
