@@ -8,14 +8,33 @@
 #include <sys/wait.h>
 #include <inttypes.h>
 #include <sys/stat.h>
+#include <errno.h>
+#include <unistd.h>
 
 #include <cassert>
 
 #include "utils.h"
-#include "all-io.h"
 #include "ttyutils.h"
 #include "pty-session.h"
 #include "debug.h"
+
+int write_all(int fd, const void *buf, size_t count) {
+	while (count) {
+		ssize_t tmp;
+
+		errno = 0;
+		tmp = write(fd, buf, count);
+		if (tmp > 0) {
+			count -= tmp;
+			if (count)
+				buf = (const void *) ((const char *) buf + tmp);
+		} else if (errno != EINTR && errno != EAGAIN)
+			return -1;
+		if (errno == EAGAIN) /* Try later, *sigh* */
+			xusleep(250000);
+	}
+	return 0;
+}
 
 Pty::Pty(bool is_stdin_tty, PtyCallback& callback)
 	: callback{ callback },

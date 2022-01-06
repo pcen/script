@@ -45,7 +45,6 @@
 #include "utils.h"
 #include "closestream.h"
 #include "ttyutils.h"
-#include "all-io.h"
 #include "signames.h"
 #include "debug.h"
 
@@ -61,6 +60,32 @@ int ScriptLog::flush() {
 	DBG("flushing " << filename);
 
 	return fflush(fp); // 0 on success
+}
+
+int ScriptLog::write(const std::string& str) {
+	return fwrite(str.c_str(), sizeof(char), str.size(), fp) > 0 ? 0 : -1;
+}
+
+int ScriptLog::write(char* buf, size_t bytes) {
+	const void* ptr = (const void*)buf;
+	while (bytes) {
+		size_t tmp;
+
+		errno = 0;
+		tmp = fwrite(ptr, 1, bytes, fp);
+		if (tmp > 0) {
+			bytes -= tmp;
+			if (bytes) {
+				ptr = static_cast<const void *>(static_cast<const char *>(ptr) + tmp);
+			}
+		} else if (errno != EINTR && errno != EAGAIN) {
+			return -1;
+		}
+		if (errno == EAGAIN) {
+			xusleep(250000);
+		}
+	}
+	return 0;
 }
 
 ScriptControl::ScriptControl()
@@ -146,10 +171,11 @@ int ScriptControl::closeLog(ScriptLog *log, const char *msg, int status) {
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		if (msg)
-			fprintf(log->fp, "\nScript done on %s [<%s>]\n", buf, msg);
-		else
-			fprintf(log->fp, "\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n", buf, status);
+		if (msg) {
+			log->write("\nScript done on %s [<%s>]\n", buf, msg);
+		} else {
+			log->write("\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n", buf, status);
+		}
 		break;
 	}
 	case ScriptFormat::TimingMulti:
@@ -236,8 +262,7 @@ int ScriptControl::startLog(ScriptLog *log) {
 		} else {
 			log->write("<not executed on terminal>");
 		}
-
-		fputs("]\n", log->fp);
+		log->write("]\n");
 		break;
 	}
 	case ScriptFormat::TimingSimple:
@@ -285,7 +310,7 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 	case ScriptFormat::Raw:
 		DBG("  log raw data");
 
-		rc = fwrite_all(obuf, 1, bytes, log->fp);
+		rc = log->write(obuf, bytes);
 		if (rc) {
 			warn("cannot write %s", log->filename.c_str());
 			return rc;

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "pty-session.h"
+#include "utils.h"
 
 enum class ScriptFormat {
 	Invalid = 0,
@@ -12,15 +13,6 @@ enum class ScriptFormat {
 	TimingSimple, // (classic) in format "<delta> <offset>"
 	TimingMulti, // (advanced) multiple streams in format "<type> <delta> <offset|etc>
 };
-
-template <typename ...Args> std::string fmtstr(const std::string& fmt, Args... args) {
-	int size_s = std::snprintf(nullptr, 0, fmt.c_str(), args...) + 1;
-	size_t size = static_cast<size_t>(size_s);
-	char* buf = new char[size];
-	std::snprintf(buf, size, fmt.c_str(), args...);
-	delete[] buf;
-	return std::string(buf, buf + size - 1);
-}
 
 class ScriptLog {
 public:
@@ -35,12 +27,10 @@ public:
 	int flush();
 
 	template <typename ...Args> int write(const std::string& fmt, Args... args) {
-		return fprintf(fp, fmt.c_str(), args...);
+		return fprintf(fp, fmt.c_str(), args...) > 0 ? 0 : -1;
 	}
-
-	int write(const std::string& str) {
-		return fwrite(str.c_str(), sizeof(char), str.size(), fp);
-	}
+	int write(const std::string& str);
+	int write(char* buf, size_t bytes);
 };
 
 class ScriptStream {
