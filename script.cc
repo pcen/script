@@ -34,13 +34,15 @@
  */
 #include "script.h"
 
-#include <stdlib.h>
 #include <stdarg.h>
 #include <err.h>
 
 #include <cstdio>
 #include <ctime>
 #include <cassert>
+#include <sstream>
+#include <iomanip>
+#include <iostream>
 
 #include "utils.h"
 #include "closestream.h"
@@ -53,6 +55,12 @@ auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be uni
 ScriptLog::ScriptLog(const std::string& filename, ScriptFormat format)
 	: fp{ nullptr }, format{ format }, filename{ filename }, initialized{ false } {}
 
+ScriptLog::~ScriptLog() {
+	for (int i = 0; i < lines.size(); i++) {
+		std::cerr << "line " << i << ": " << lines.at(i) << std::endl;
+	}
+}
+
 int ScriptLog::flush() {
 	if (!initialized) {
 		return 0;
@@ -63,19 +71,42 @@ int ScriptLog::flush() {
 }
 
 int ScriptLog::write(const std::string& str) {
-	return fwrite(str.c_str(), sizeof(char), str.size(), fp) > 0 ? 0 : -1;
+	int ret = fwrite(str.c_str(), sizeof(char), str.size(), fp) > 0 ? 0 : -1;
+
+	// buffer << str;
+	// std::string line;
+	// while (std::getline(buffer, line, '\n')) {
+	// 	lines.push_back(line);
+	// }
+
+	return ret;
 }
 
 int ScriptLog::write(char* buf, size_t bytes) {
 	const void* ptr = (const void*)buf;
-	while (bytes) {
+	size_t remaining = bytes;
+
+	buffer.insert(buffer.end(), buf, buf + bytes);
+
+getLineFromBuffer:
+	int s = buffer.size();
+	for (int i = 0; i < s - 1; i++) {
+		if (buffer.at(i) == '\r' && buffer.at(i + 1) == '\n') {
+			std::string line = std::string(buffer.begin(), buffer.begin() + i); // exclude \r\n
+			lines.push_back(line);
+			buffer.erase(buffer.begin(), buffer.begin() + i + 2);
+			goto getLineFromBuffer;
+		}
+	}
+
+	while (remaining) {
 		size_t tmp;
 
 		errno = 0;
-		tmp = fwrite(ptr, 1, bytes, fp);
+		tmp = fwrite(ptr, 1, remaining, fp);
 		if (tmp > 0) {
-			bytes -= tmp;
-			if (bytes) {
+			remaining -= tmp;
+			if (remaining) {
 				ptr = static_cast<const void *>(static_cast<const char *>(ptr) + tmp);
 			}
 		} else if (errno != EINTR && errno != EAGAIN) {
@@ -85,6 +116,7 @@ int ScriptLog::write(char* buf, size_t bytes) {
 			xusleep(250000);
 		}
 	}
+
 	return 0;
 }
 
@@ -171,10 +203,14 @@ int ScriptControl::closeLog(ScriptLog *log, const char *msg, int status) {
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
+		std::stringstream ss;
+		ss << "\nScript done on " << buf << " ";
 		if (msg) {
-			log->write("\nScript done on %s [<%s>]\n", buf, msg);
+			ss << "[<" << msg << ">]\n";
+			log->write(ss.str());
 		} else {
-			log->write("\nScript done on %s [COMMAND_EXIT_CODE=\"%d\"]\n", buf, status);
+			ss << "[COMMAND_EXIT_CODE=\"" << status << "\"]\n";
+			log->write(ss.str());
 		}
 		break;
 	}
@@ -243,26 +279,26 @@ int ScriptControl::startLog(ScriptLog *log) {
 	switch (log->format) {
 	case ScriptFormat::Raw:
 	{
+		std::stringstream ss;
 		char buf[FORMAT_TIMESTAMP_MAX];
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
-
-		log->write("Script started on %s [", buf);
+		ss << "Script started on " << buf << " [";
 
 		if (isterm) {
 			initTerminalInfo();
-
 			if (ttytype) {
-				log->write("TERM=\"%s\" ", ttytype);
+				ss << "TERM=\"" << ttytype << "\" ";
 			}
 			if (ttyname) {
-				log->write("TTY=\"%s\" ", ttyname);
+				ss << "TTY=\"" << ttyname << "\" ";
 			}
-			log->write("COLUMNS=\"%d\" LINES=\"%d\"", ttycols, ttylines);
+			ss << "COLUMNS=\"" << ttycols << "\" LINES=\"" << ttylines << "\"";
 		} else {
-			log->write("<not executed on terminal>");
+			ss << "<not executed on terminal>";
 		}
-		log->write("]\n");
+		ss << "]\n";
+		log->write(ss.str());
 		break;
 	}
 	case ScriptFormat::TimingSimple:
@@ -306,6 +342,8 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 
 	DBG(" writing [file=" << log->filename << "]");
 
+	std::stringstream ss;
+
 	switch (log->format) {
 	case ScriptFormat::Raw:
 		DBG("  log raw data");
@@ -323,11 +361,8 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = log->write("%ld.%06ld %zd\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
-		if (ssz < 0) {
-			return -errno;
-		}
-
+		ss << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec << " " << bytes << "\n";
+		ssz = log->write(ss.str());
 		log->oldtime = now;
 		break;
 
@@ -336,13 +371,11 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ssz = log->write("%c %ld.%06ld %zd\n", stream.ident, (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, bytes);
-		if (ssz < 0) {
-			return -errno;
-		}
-
+		ss << stream.ident << " " << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_sec << " " << bytes << "\n";
+		ssz = log->write(ss.str());
 		log->oldtime = now;
 		break;
+
 	default:
 		break;
 	}
@@ -394,12 +427,13 @@ ssize_t ScriptControl::logSignal(int signum, const char* msgfmt, ...) {
 		}
 	}
 
+	std::stringstream ss;
+	ss << "S " << delta.tv_sec << "."<< std::setfill('0') << std::setw(6) << delta.tv_usec << " SIG" << signum_to_signame(signum);
 	if (*msg) {
-		sz = log->write("S %ld.%06ld SIG%s %s\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, signum_to_signame(signum), msg);
-	} else {
-		sz = log->write("S %ld.%06ld SIG%s\n", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec, signum_to_signame(signum));
+		ss << " " << msg;
 	}
-
+	ss << "\n";
+	log->write(ss.str());
 	log->oldtime = now;
 	return sz;
 }
@@ -428,15 +462,16 @@ ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 		}
 	}
 
+	std::stringstream ss;
+	ss << "H " << 0.0 << " " << name;
 	if (*msg) {
-		sz = log->write("H %f %s %s\n", 0.0, name, msg);
-	} else {
-		sz = log->write("H %f %s\n", 0.0, name);
+		ss << " " << msg;
 	}
+	ss << "\n";
+	sz = log->write(ss.str());
 
 	return sz;
 }
-
 
 void ScriptControl::loggingDone(const char *msg) {
 	int status;

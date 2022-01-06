@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <deque>
 
 #include "pty-session.h"
 #include "utils.h"
@@ -23,12 +24,13 @@ public:
 	struct timeval starttime;
 	bool initialized;
 
+	std::deque<char> buffer;
+	std::vector<std::string> lines;
+
 	ScriptLog(const std::string& filename, ScriptFormat format);
+	~ScriptLog();
 	int flush();
 
-	template <typename ...Args> int write(const std::string& fmt, Args... args) {
-		return fprintf(fp, fmt.c_str(), args...) > 0 ? 0 : -1;
-	}
 	int write(const std::string& str);
 	int write(char* buf, size_t bytes);
 };
