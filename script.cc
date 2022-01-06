@@ -217,12 +217,14 @@ int ScriptControl::closeLog(ScriptLog *log, const char *msg, int status) {
 	case ScriptFormat::TimingMulti:
 	{
 		struct timeval now = { 0 }, delta = { 0 };
+		std::stringstream ss;
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->starttime, &delta);
 
-		logInfo("DURATION", "%ld.%06ld", (int64_t)delta.tv_sec, (int64_t)delta.tv_usec);
-		logInfo("EXIT_CODE", "%d", status);
+		ss << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec;
+		logInfo("DURATION", ss.str());
+		logInfo("EXIT_CODE", std::to_string(status));
 		break;
 	}
 	case ScriptFormat::TimingSimple:
@@ -439,11 +441,7 @@ ssize_t ScriptControl::logSignal(int signum, const char* msgfmt, ...) {
 }
 
 // logInfo writes a message to the infolog
-ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
-	char msg[BUFSIZ] = {0};
-	va_list ap;
-	ssize_t sz;
-
+ssize_t ScriptControl::logInfo(const std::string& name, const std::string& msg) {
 	ScriptLog* log = infolog;
 	if (!log) {
 		return 0;
@@ -452,24 +450,13 @@ ssize_t ScriptControl::logInfo(const char *name, const char *msgfmt, ...) {
 	assert(log->format == ScriptFormat::TimingMulti);
 	DBG("  writing info to multi-stream log");
 
-	if (msgfmt) {
-		int rc;
-		va_start(ap, msgfmt);
-		rc = vsnprintf(msg, sizeof(msg), msgfmt, ap);
-		va_end(ap);
-		if (rc < 0) {
-			*msg = '\0';;
-		}
-	}
-
 	std::stringstream ss;
 	ss << "H " << 0.0 << " " << name;
-	if (*msg) {
+	if (!msg.empty()) {
 		ss << " " << msg;
 	}
 	ss << "\n";
-	sz = log->write(ss.str());
-
+	size_t sz = log->write(ss.str());
 	return sz;
 }
 

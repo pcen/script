@@ -317,25 +317,25 @@ int main(int argc, char* argv[]) {
 		time_t tvec = std::time(nullptr);
 		std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&tvec));
 
-		ctl.logInfo("START_TIME", "%s", buf);
+		ctl.logInfo("START_TIME", std::string(buf));
 
 		if (ctl.isterm) {
 			ctl.initTerminalInfo();
-			ctl.logInfo("TERM", "%s", ctl.ttytype);
-			ctl.logInfo("TTY", "%s", ctl.ttyname);
-			ctl.logInfo("COLUMNS", "%d", ctl.ttycols);
-			ctl.logInfo("LINES", "%d", ctl.ttylines);
+			ctl.logInfo("TERM", std::string(ctl.ttytype));
+			ctl.logInfo("TTY", std::string(ctl.ttyname));
+			ctl.logInfo("COLUMNS", std::to_string(ctl.ttycols));
+			ctl.logInfo("LINES", std::to_string(ctl.ttylines));
 		}
-		ctl.logInfo("SHELL", "%s", shell);
+		ctl.logInfo("SHELL", std::string(shell));
 		if (command) {
-			ctl.logInfo("COMMAND", "%s", command);
+			ctl.logInfo("COMMAND", std::string(command));
 		}
-		ctl.logInfo("TIMING_LOG", "%s", timingfile);
+		ctl.logInfo("TIMING_LOG", timingfile);
 		if (!outfile.empty()) {
-			ctl.logInfo("OUTPUT_LOG", "%s", outfile);
+			ctl.logInfo("OUTPUT_LOG", outfile);
 		}
 		if (!infile.empty()) {
-			ctl.logInfo("INPUT_LOG", "%s", infile);
+			ctl.logInfo("INPUT_LOG", infile);
 		}
 	}
 

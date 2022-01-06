@@ -80,7 +80,7 @@ public:
 	ssize_t logWrite(ScriptStream& stream, ScriptLog* log, char* obuf, size_t bytes);
 	ssize_t logStreamActivity(ScriptStream& stream, char* buf, size_t bytes);
 	ssize_t logSignal(int signum, const char *msgfmt, ...);
-	ssize_t logInfo(const char* name, const char* msgfmt, ...);
+	ssize_t logInfo(const std::string& name, const std::string& msg = std::string());
 
 	void loggingDone(const char* msg);
 	int closeLog(ScriptLog* log, const char* msg, int status);
