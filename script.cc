@@ -373,7 +373,7 @@ ssize_t ScriptControl::logWrite(ScriptStream& stream, ScriptLog* log, char* obuf
 
 		gettime_monotonic(&now);
 		timersub(&now, &log->oldtime, &delta);
-		ss << stream.ident << " " << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_sec << " " << bytes << "\n";
+		ss << stream.ident << " " << delta.tv_sec << "." << std::setfill('0') << std::setw(6) << delta.tv_usec << " " << bytes << "\n";
 		ssz = log->write(ss.str());
 		log->oldtime = now;
 		break;
@@ -451,7 +451,7 @@ ssize_t ScriptControl::logInfo(const std::string& name, const std::string& msg) 
 	DBG("  writing info to multi-stream log");
 
 	std::stringstream ss;
-	ss << "H " << 0.0 << " " << name;
+	ss << "H " << 0 << "." << std::setfill('0') << std::setw(6) << 0 << " " << name;
 	if (!msg.empty()) {
 		ss << " " << msg;
 	}
