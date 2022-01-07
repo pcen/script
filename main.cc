@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <ctime>
+#include <cstring>
 #include <filesystem>
 #include <unordered_map>
 

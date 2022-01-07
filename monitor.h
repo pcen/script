@@ -21,7 +21,6 @@ public:
 private:
 	void parseCommand(const std::string& line);
 
-	std::vector<char> cmd;
 	std::deque<char> output;
 	std::vector<Line> commands;
 	std::vector<Line> lines;

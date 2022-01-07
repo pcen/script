@@ -1,7 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include <cstring>
 #include <ctime>
 #include <chrono>
 
@@ -24,37 +23,6 @@
 inline int xusleep(useconds_t usec) {
 	timespec waittime{usec / 1000000L, (usec % 1000000L) * 1000};
 	return nanosleep(&waittime, nullptr);
-}
-
-inline const char* startswith(const char *s, const char *prefix) {
-	size_t sz = prefix ? strlen(prefix) : 0;
-
-	if (s && sz && strncmp(s, prefix, sz) == 0) {
-		return s + sz;
-	}
-	return nullptr;
-}
-
-inline const char* startswith_no_case(const char *s, const char *prefix) {
-	size_t sz = prefix ? strlen(prefix) : 0;
-
-	if (s && sz && strncasecmp(s, prefix, sz) == 0) {
-		return s + sz;
-	}
-	return nullptr;
-}
-
-inline const char* endswith(const char *s, const char *postfix) {
-	size_t sl = s ? strlen(s) : 0;
-	size_t pl = postfix ? strlen(postfix) : 0;
-
-	if (pl == 0)
-		return s + sl;
-	if (sl < pl)
-		return nullptr;
-	if (memcmp(s + sl - pl, postfix, pl) != 0)
-		return nullptr;
-	return s + sl - pl;
 }
 
 inline timeval getMonotonicTime() {
