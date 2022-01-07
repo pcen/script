@@ -55,11 +55,7 @@ auto constexpr FORMAT_TIMESTAMP_MAX = ((4*4+1)+11+9+4+1); // weekdays can be uni
 ScriptLog::ScriptLog(const std::string& filename, ScriptFormat format)
 	: fp{ nullptr }, format{ format }, filename{ filename }, initialized{ false } {}
 
-ScriptLog::~ScriptLog() {
-	for (int i = 0; i < lines.size(); i++) {
-		std::cerr << "line " << i << ": " << lines.at(i) << std::endl;
-	}
-}
+ScriptLog::~ScriptLog() {}
 
 int ScriptLog::flush() {
 	if (!initialized) {
@@ -71,33 +67,12 @@ int ScriptLog::flush() {
 }
 
 int ScriptLog::write(const std::string& str) {
-	int ret = fwrite(str.c_str(), sizeof(char), str.size(), fp) > 0 ? 0 : -1;
-
-	// buffer << str;
-	// std::string line;
-	// while (std::getline(buffer, line, '\n')) {
-	// 	lines.push_back(line);
-	// }
-
-	return ret;
+	return fwrite(str.c_str(), sizeof(char), str.size(), fp) > 0 ? 0 : -1;
 }
 
 int ScriptLog::write(char* buf, size_t bytes) {
 	const void* ptr = (const void*)buf;
 	size_t remaining = bytes;
-
-	buffer.insert(buffer.end(), buf, buf + bytes);
-
-getLineFromBuffer:
-	int s = buffer.size();
-	for (int i = 0; i < s - 1; i++) {
-		if (buffer.at(i) == '\r' && buffer.at(i + 1) == '\n') {
-			std::string line = std::string(buffer.begin(), buffer.begin() + i); // exclude \r\n
-			lines.push_back(line);
-			buffer.erase(buffer.begin(), buffer.begin() + i + 2);
-			goto getLineFromBuffer;
-		}
-	}
 
 	while (remaining) {
 		size_t tmp;
@@ -510,6 +485,7 @@ int ScriptControl::ptyLogStreamActivity(int fd, char* buf, size_t bufsz) {
 		ssz = logStreamActivity(in, buf, (size_t) bufsz);
 	} else if (fd == ul_pty_get_childfd(pty)) {
 		// from command (master) to stdout and log
+		monitor.onOutput(buf, bufsz);
 		ssz = logStreamActivity(out, buf, (size_t) bufsz);
 	}
 

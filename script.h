@@ -3,8 +3,8 @@
 
 #include <vector>
 #include <string>
-#include <deque>
 
+#include "monitor.h"
 #include "pty-session.h"
 #include "utils.h"
 
@@ -23,9 +23,6 @@ public:
 	struct timeval oldtime; // previous entry log time (timing script only)
 	struct timeval starttime;
 	bool initialized;
-
-	std::deque<char> buffer;
-	std::vector<std::string> lines;
 
 	ScriptLog(const std::string& filename, ScriptFormat format);
 	~ScriptLog();
@@ -94,6 +91,9 @@ public:
 	int ptyLogStreamActivity(int, char*, size_t) override;
 	int ptyLogSignal(struct signalfd_siginfo*, void*) override;
 	int ptyFlushLogs() override;
+
+private:
+	Monitor monitor;
 };
 
 #endif // SCRIPT_H
