@@ -129,7 +129,10 @@ std::unordered_map<char, std::string> parseArgs(ScriptControl& ctl, int& argCoun
 					exit(EXIT_FAILURE);
 				}
 				break;
+			case 'i': // ignore interactive option
+				break;
 			default:
+				std::cerr << "Unknown option: " << c << std::endl;
 				std::cerr << "Try '" << program_invocation_name << "--help' for more information." << std::endl;
 				exit(EXIT_FAILURE);
 		}
@@ -240,11 +243,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	shell = getenv("SHELL");
-	if (!shell) {
-		std::cerr << "SHELL is not set" << std::endl;
-		exit(EXIT_FAILURE);
-	}
+	shell = "bash";
 
 	ctl.pty = new Pty(ctl.isterm, ctl);
 	if (!ctl.pty)
